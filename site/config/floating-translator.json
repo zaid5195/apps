@@ -1,5 +1,5 @@
 {
-  "maintenance": false,
+  "maintenance": true,
   "maintenanceMessage": "",
   "minVersionCode": 0,
   "latestVersionCode": 5,
