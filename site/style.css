@@ -1,0 +1,71 @@
+:root {
+  --bg: #0b1220;
+  --bg2: #111a2e;
+  --card: #141f36;
+  --line: rgba(255, 255, 255, .1);
+  --text: #f1f5f9;
+  --muted: #94a3b8;
+  --accent: #4ade80;
+  --blue: #60a5fa;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Cairo', system-ui, sans-serif;
+  background: radial-gradient(circle at 80% 0%, #1d3b6e 0%, var(--bg) 45%) fixed, var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+  min-height: 100vh;
+}
+a { color: inherit; text-decoration: none; }
+main { max-width: 960px; margin: 0 auto; padding: 0 16px; }
+section { margin: 40px 0; }
+h1 { font-size: clamp(30px, 6vw, 48px); font-weight: 900; line-height: 1.3; }
+h2 { font-size: 26px; font-weight: 800; margin-bottom: 16px; }
+h2 small { color: var(--muted); font-size: 18px; }
+
+.top { max-width: 960px; margin: 0 auto; padding: 18px 16px; }
+.brand { font-weight: 900; font-size: 20px; }
+
+.hero { text-align: center; padding: 30px 0 10px; }
+.steps { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 28px; }
+.steps div { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 14px 20px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.steps span { font-size: 24px; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.card { display: flex; gap: 16px; align-items: flex-start; background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: 18px; transition: transform .15s, border-color .15s; }
+.card:hover { transform: translateY(-3px); border-color: var(--accent); }
+.card h3 { font-size: 20px; font-weight: 800; }
+.card p { color: var(--muted); font-size: 15px; }
+
+.icon { flex: none; width: 72px; height: 72px; border-radius: 20px; background: linear-gradient(135deg, var(--c), color-mix(in srgb, var(--c) 55%, #000)); display: flex; align-items: center; justify-content: center; font-size: 38px; box-shadow: 0 8px 24px rgba(0, 0, 0, .35); }
+
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; font-size: 13px; color: var(--muted); }
+.meta span { background: rgba(255, 255, 255, .06); padding: 2px 10px; border-radius: 999px; }
+.meta .badge { background: rgba(74, 222, 128, .15); color: var(--accent); font-weight: 700; }
+.meta.center { justify-content: center; }
+
+.app-hero { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.app-hero .icon { width: 110px; height: 110px; font-size: 58px; border-radius: 30px; }
+.lead { color: var(--muted); font-size: 19px; max-width: 560px; }
+.download { margin-top: 14px; background: var(--accent); color: #052e16; font-weight: 900; font-size: 21px; padding: 16px 34px; border-radius: 18px; box-shadow: 0 10px 30px rgba(74, 222, 128, .35); }
+.download:active { transform: scale(.97); }
+.credit { color: var(--muted); }
+.credit b { color: var(--text); }
+.desc { font-size: 18px; background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 20px; }
+.video { display: inline-block; background: var(--card); border: 1px solid var(--blue); color: var(--blue); padding: 12px 22px; border-radius: 16px; font-weight: 800; }
+
+.features { list-style: none; display: grid; gap: 10px; }
+.features li { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 12px 16px; font-weight: 600; }
+.howto { padding-right: 24px; display: grid; gap: 8px; }
+.howto li::marker { color: var(--accent); font-weight: 900; }
+
+.suggest { text-align: center; background: var(--card); border: 1px solid var(--line); border-radius: 24px; padding: 28px 20px; }
+.suggest p { color: var(--muted); }
+.socials { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+.soc { background: rgba(255, 255, 255, .08); border: 1px solid var(--line); padding: 8px 18px; border-radius: 999px; font-weight: 700; }
+
+.back { margin: 30px 0; }
+.back a { color: var(--blue); font-weight: 700; }
+
+footer { text-align: center; color: var(--muted); font-size: 14px; padding: 30px 16px 40px; border-top: 1px solid var(--line); margin-top: 50px; }
+footer .socials { margin: 0 0 14px; }

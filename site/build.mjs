@@ -1,0 +1,153 @@
+// Builds the apps website from site/apps.json into _site/.
+// Usage: node site/build.mjs   (no dependencies)
+import { readFileSync, writeFileSync, mkdirSync, rmSync, copyFileSync, cpSync, existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = dirname(fileURLToPath(import.meta.url));
+const out = join(root, '..', '_site');
+const data = JSON.parse(readFileSync(join(root, 'apps.json'), 'utf8'));
+const { site, apps } = data;
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+for (const a of apps) {
+  for (const k of ['slug', 'name', 'download']) if (!a[k]) throw new Error(`app missing "${k}": ${JSON.stringify(a)}`);
+  if (!/^[a-z0-9-]+$/.test(a.slug)) throw new Error(`bad slug: ${a.slug}`);
+}
+
+const socials = () => {
+  const l = site.links || {};
+  const items = [
+    l.youtube && `<a class="soc" href="${esc(l.youtube)}" target="_blank" rel="noopener">▶️ يوتيوب</a>`,
+    l.tiktok && `<a class="soc" href="${esc(l.tiktok)}" target="_blank" rel="noopener">🎵 تيك توك</a>`,
+  ].filter(Boolean);
+  return items.length ? `<div class="socials">${items.join('')}</div>` : '';
+};
+
+const page = ({ title, desc, path, body, depth }) => {
+  const up = depth ? '../'.repeat(depth) : './';
+  return `<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(title)}</title>
+<meta name="description" content="${esc(desc)}">
+<meta property="og:title" content="${esc(title)}">
+<meta property="og:description" content="${esc(desc)}">
+<meta property="og:url" content="${esc(site.baseUrl + path)}">
+<meta name="theme-color" content="#0b1220">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="${up}style.css">
+</head>
+<body>
+<header class="top"><a class="brand" href="${up}">📱 ${esc(site.title)}</a></header>
+<main>
+${body}
+</main>
+<footer>
+  ${socials()}
+  <p>التطبيقات مجانية ومصنوعة بالذكاء الاصطناعي بناءً على اقتراحات المتابعين.</p>
+</footer>
+</body>
+</html>
+`;
+};
+
+const icon = a => `<div class="icon" style="--c:${esc(a.color || '#2563eb')}">${esc(a.emoji || '📱')}</div>`;
+
+const card = a => `
+  <a class="card" href="${esc(a.slug)}/">
+    ${icon(a)}
+    <div class="card-body">
+      <h3>${esc(a.name)}</h3>
+      <p>${esc(a.tagline)}</p>
+      <div class="meta">
+        <span class="badge">${esc(a.status || 'متاح')}</span>
+        ${a.version ? `<span>نسخة ${esc(a.version)}</span>` : ''}
+        ${a.suggestedBy ? `<span>💡 اقتراح ${esc(a.suggestedBy)}</span>` : ''}
+      </div>
+    </div>
+  </a>`;
+
+const sorted = [...apps].sort((x, y) => String(y.released || '').localeCompare(String(x.released || '')));
+
+const home = page({
+  title: `${site.title} — ${site.tagline}`,
+  desc: site.tagline,
+  path: '/',
+  depth: 0,
+  body: `
+<section class="hero">
+  <h1>${esc(site.tagline)}</h1>
+  <div class="steps">
+    <div><span>💡</span>تقترح فكرة</div>
+    <div><span>🤖</span>نسويها بالذكاء الاصطناعي</div>
+    <div><span>⬇️</span>تحمّلها مجانًا</div>
+  </div>
+</section>
+<section>
+  <h2>التطبيقات <small>(${apps.length})</small></h2>
+  <div class="grid">${sorted.map(card).join('')}</div>
+</section>
+<section class="suggest">
+  <h2>عندك فكرة تطبيق؟ 💡</h2>
+  <p>اكتبها في تعليقات آخر فيديو، وممكن يكون تطبيقك هو الجاي — ونكتب اسمك عليه.</p>
+  ${socials()}
+</section>`,
+});
+
+// Relative download paths (e.g. "downloads/x.apk") are files hosted on this site.
+const dl = (a, depth) => /^https?:\/\//.test(a.download) ? a.download : '../'.repeat(depth) + a.download;
+
+const appPage = a => page({
+  title: `${a.name} — ${site.title}`,
+  desc: a.tagline || a.description,
+  path: `/${a.slug}/`,
+  depth: 1,
+  body: `
+<section class="app-hero">
+  ${icon(a)}
+  <h1>${esc(a.name)}</h1>
+  <p class="lead">${esc(a.tagline)}</p>
+  <div class="meta center">
+    <span class="badge">${esc(a.status || 'متاح')}</span>
+    ${a.version ? `<span>نسخة ${esc(a.version)}</span>` : ''}
+    ${a.platform ? `<span>${esc(a.platform)}</span>` : ''}
+  </div>
+  <a class="download" href="${esc(dl(a, 1))}" download>⬇️ تحميل التطبيق مجانًا</a>
+  ${a.suggestedBy ? `<p class="credit">💡 فكرة التطبيق من: <b>${esc(a.suggestedBy)}</b></p>` : ''}
+</section>
+${a.description ? `<section><p class="desc">${esc(a.description)}</p></section>` : ''}
+${a.video ? `<section><a class="video" href="${esc(a.video)}" target="_blank" rel="noopener">🎬 شوف فيديو التطبيق</a></section>` : ''}
+${a.features?.length ? `<section><h2>المزايا</h2><ul class="features">${a.features.map(f => `<li>${esc(f)}</li>`).join('')}</ul></section>` : ''}
+${a.howTo?.length ? `<section><h2>طريقة الاستخدام</h2><ol class="howto">${a.howTo.map(s => `<li>${esc(s)}</li>`).join('')}</ol></section>` : ''}
+<section class="install">
+  <h2>طريقة التثبيت</h2>
+  <ol class="howto">
+    <li>اضغط «تحميل التطبيق» وانتظر ينزل الملف</li>
+    <li>افتح الملف من الإشعارات أو من مجلد التنزيلات</li>
+    <li>إذا طلب منك، اسمح بـ «التثبيت من مصادر غير معروفة»</li>
+    <li>اضغط «تثبيت» — وللتحديث نزّل النسخة الجديدة وثبّتها فوق القديمة</li>
+  </ol>
+</section>
+<p class="back"><a href="../">→ كل التطبيقات</a></p>`,
+});
+
+rmSync(out, { recursive: true, force: true });
+mkdirSync(out, { recursive: true });
+writeFileSync(join(out, 'index.html'), home);
+copyFileSync(join(root, 'style.css'), join(out, 'style.css'));
+for (const a of apps) {
+  mkdirSync(join(out, a.slug), { recursive: true });
+  writeFileSync(join(out, a.slug, 'index.html'), appPage(a));
+}
+// APK files: site/downloads/ (local) or the folder given in APK_DIR (CI, from the apk-files branch).
+const apkDir = process.env.APK_DIR || join(root, 'downloads');
+if (existsSync(apkDir)) cpSync(apkDir, join(out, 'downloads'), { recursive: true, filter: s => !s.includes('/.git') });
+for (const a of apps) {
+  if (!/^https?:\/\//.test(a.download) && !existsSync(join(out, a.download))) throw new Error(`missing file for ${a.slug}: ${a.download}`);
+}
+console.log(`Built ${apps.length} app page(s) into ${out}`);
