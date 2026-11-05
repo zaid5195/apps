@@ -2,11 +2,11 @@
   "maintenance": false,
   "maintenanceMessage": "",
   "minVersionCode": 0,
-  "latestVersionCode": 5,
+  "latestVersionCode": 0,
   "updateUrl": "https://zaid5195.github.io/apps/floating-translator/",
   "message": {
-    "id": "",
-    "text": "",
+    "id": "msg-1793914324295",
+    "text": "تجربة",
     "url": ""
   },
   "disabledFeatures": []
