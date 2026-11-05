@@ -133,6 +133,12 @@ ${a.howTo?.length ? `<section><h2>طريقة الاستخدام</h2><ol class="h
     <li>اضغط «تثبيت» — وللتحديث نزّل النسخة الجديدة وثبّتها فوق القديمة</li>
   </ol>
 </section>
+${a.signature ? `<section class="official">
+  <h2>✅ نسخة رسمية</h2>
+  <p>كل تطبيقاتنا موقّعة بمفتاح المطوّر ${esc(site.developer || '')}. التطبيق نفسه يتأكد من توقيعه، وتلقى في «عن التطبيق» كلمة «نسخة رسمية». إذا لقيت نسخة من مكان ثاني، أندرويد ما راح يقبلها كتحديث لتطبيقنا.</p>
+  <p class="sig-label">بصمة التوقيع (SHA-256):</p>
+  <code class="sig">${esc(a.signature)}</code>
+</section>` : ''}
 <p class="back"><a href="../">→ كل التطبيقات</a></p>`,
 });
 
@@ -146,6 +152,12 @@ for (const a of apps) {
 }
 // APK files: site/downloads/ (local) or the folder given in APK_DIR (CI, from the apk-files branch).
 const apkDir = process.env.APK_DIR || join(root, 'downloads');
+const cfgDir = join(root, 'config');
+if (existsSync(cfgDir)) cpSync(cfgDir, join(out, 'config'), { recursive: true });
+for (const a of apps) {
+  const f = join(out, 'config', `${a.slug}.json`);
+  if (existsSync(f)) JSON.parse(readFileSync(f, 'utf8')); // fail the build on a broken control file
+}
 if (existsSync(apkDir)) cpSync(apkDir, join(out, 'downloads'), { recursive: true, filter: s => !s.includes('/.git') });
 for (const a of apps) {
   if (!/^https?:\/\//.test(a.download) && !existsSync(join(out, a.download))) throw new Error(`missing file for ${a.slug}: ${a.download}`);

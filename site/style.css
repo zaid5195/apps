@@ -69,3 +69,8 @@ h2 small { color: var(--muted); font-size: 18px; }
 
 footer { text-align: center; color: var(--muted); font-size: 14px; padding: 30px 16px 40px; border-top: 1px solid var(--line); margin-top: 50px; }
 footer .socials { margin: 0 0 14px; }
+
+.official { background: var(--card); border: 1px solid var(--accent); border-radius: 20px; padding: 20px; }
+.official p { color: var(--muted); }
+.sig-label { margin-top: 10px; font-size: 14px; }
+.sig { display: block; direction: ltr; text-align: left; font-size: 12px; word-break: break-all; background: rgba(0,0,0,.35); padding: 10px; border-radius: 10px; color: var(--text); }
