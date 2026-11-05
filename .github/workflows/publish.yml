@@ -3,9 +3,11 @@ name: Publish website
 # main holds the site source (site/); the apk-files branch holds the latest
 # APK of every app (one commit, force-pushed, so history stays small).
 # The built site is force-pushed to gh-pages as a single commit.
+# A push to apk-files does not trigger this (that branch has no workflow
+# file), so after updating an APK run this workflow manually.
 on:
   push:
-    branches: [main, apk-files]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
