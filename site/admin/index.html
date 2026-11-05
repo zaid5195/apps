@@ -82,6 +82,12 @@
   .top { display: flex; justify-content: space-between; align-items: center; }
   .logout { background: none; color: var(--muted); padding: 6px; font-size: 14px; }
   .group-title { color: var(--muted); font-weight: 800; font-size: 14px; margin: 18px 4px 8px; }
+  .bars { display: flex; align-items: flex-end; gap: 6px; height: 90px; margin-top: 10px; }
+  .bar { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+  .bar i { display: block; width: 100%; background: var(--blue); border-radius: 6px 6px 2px 2px; min-height: 3px; }
+  .bar.today i { background: var(--accent); }
+  .bar b { font-size: 11px; color: var(--text); }
+  .bar span { font-size: 10px; color: var(--muted); }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -121,6 +127,10 @@
         <div class="stat"><b id="st-dl">0</b><span>⬇️ تحميل</span></div>
         <div class="stat"><b id="st-soon">0</b><span>🔜 قريباً</span></div>
       </div>
+      <div class="stats" style="grid-template-columns:1fr 1fr;margin-top:10px">
+        <div class="stat"><b id="st-today">–</b><span>👥 استخدموها اليوم</span></div>
+        <div class="stat"><b id="st-installs">–</b><span>📲 تثبيت (من نسخة 1.6)</span></div>
+      </div>
       <p class="note" id="st-last"></p>
     </section>
 
@@ -136,6 +146,16 @@
     <div id="apps-live"></div>
     <div class="group-title" id="g-soon">🔜 تطبيقات قادمة</div>
     <div id="apps-soon"></div>
+
+    <details class="app" id="site-settings">
+      <summary><div class="icon" style="background:#1e293b">⚙️</div><div><h2>إعدادات الموقع</h2><span class="hint">روابط القناة وزر «ادعمنا»</span></div><span class="chev">▾</span></summary>
+      <div class="app-body">
+        <label class="f">🎵 رابط تيك توك</label><input type="url" data-link="tiktok" placeholder="https://www.tiktok.com/@...">
+        <label class="f">▶️ رابط يوتيوب (اختياري)</label><input type="url" data-link="youtube" placeholder="https://youtube.com/@...">
+        <label class="f">💚 رابط «ادعمنا» (اختياري)</label><input type="url" data-link="support" placeholder="مثل رابط PayPal.me أو Ko-fi">
+        <p class="note">إذا حطيت رابط «ادعمنا»، يطلع زر في الموقع وداخل التطبيقات (نسخة 1.6 فما فوق). امسحه عشان يختفي.</p>
+      </div>
+    </details>
 
     <details class="app" id="add">
       <summary><div class="icon" style="background:#1e293b">➕</div><div><h2>أضف تطبيق قادم</h2><span class="hint">يطلع في الموقع «قريباً» مع اسم صاحب الفكرة</span></div><span class="chev">▾</span></summary>
@@ -231,6 +251,23 @@ async function loadDownloads() {
   S.downloads = by;
 }
 
+// Anonymous usage counters (apps 1.6+): <slug>-installs (once per install) and
+// <slug>-d-YYYYMMDD (once per device per day, UTC). Public counters on abacus.
+const COUNTER = 'https://abacus.jasoncameron.dev/get/uryon29-h/';
+const day = d => d.toISOString().slice(0, 10).replace(/-/g, '');
+async function counter(key) {
+  try { const r = await fetch(COUNTER + key, { cache: 'no-store' }); if (!r.ok) return 0; const v = (await r.json()).value; return v > 0 ? v : 0; } catch { return 0; }
+}
+async function loadUsage() {
+  const out = {};
+  const days = [...Array(7)].map((_, i) => new Date(Date.now() - (6 - i) * 864e5));
+  await Promise.all(S.listing.data.apps.filter(a => !isSoon(a)).map(async a => {
+    const [installs, ...daily] = await Promise.all([counter(`${a.slug}-installs`), ...days.map(d => counter(`${a.slug}-d-${day(d)}`))]);
+    out[a.slug] = { installs, daily: daily.map((n, i) => ({ n, label: days[i].toLocaleDateString('ar', { weekday: 'short' }) })) };
+  }));
+  S.usage = out;
+}
+
 async function start() {
   $('login').hidden = true; $('loading').hidden = false; $('logout').hidden = false;
   try {
@@ -248,6 +285,7 @@ async function start() {
       }
     }
     try { await loadDownloads(); } catch { S.downloads = {}; }
+    try { await loadUsage(); } catch { S.usage = {}; }
     try { const lr = (await readJson('site/last-release.json')).data; S.lastRelease = lr; } catch { S.lastRelease = null; }
     $('loading').hidden = true; $('dash').hidden = false;
     renderAll();
@@ -266,6 +304,19 @@ function renderAll() {
   $('st-dl').textContent = fmt(Object.entries(S.downloads).filter(([s]) => apps.some(a => a.slug === s)).reduce((n, [, d]) => n + d.total, 0));
   const lr = S.lastRelease;
   $('st-last').textContent = lr ? `🕒 آخر إصدار: ${lr.apps.map(a => (apps.find(x => x.slug === a.slug)?.name || a.slug) + ' ' + a.versionName).join('، ')} — ${new Date(lr.time).toLocaleString('ar')}` : '';
+  const usage = Object.values(S.usage || {});
+  $('st-today').textContent = usage.length ? fmt(usage.reduce((n, u) => n + u.daily[6].n, 0)) : '–';
+  $('st-installs').textContent = usage.length ? fmt(usage.reduce((n, u) => n + u.installs, 0)) : '–';
+  const links = S.listing.data.site.links ||= {};
+  document.querySelectorAll('[data-link]').forEach(inp => {
+    inp.value = links[inp.dataset.link] || '';
+    inp.oninput = () => {
+      const v = inp.value.trim(); v ? links[inp.dataset.link] = v : delete links[inp.dataset.link];
+      // The apps show the support button from their control files.
+      if (inp.dataset.link === 'support') Object.values(S.configs).forEach(f => v ? f.data.supportUrl = v : delete f.data.supportUrl);
+      dirty();
+    };
+  });
   $('g-soon').hidden = !soon.length;
   $('apps-live').innerHTML = ''; $('apps-soon').innerHTML = '';
   live.forEach(a => $('apps-live').appendChild(renderApp(a)));
@@ -298,6 +349,15 @@ function renderApp(app) {
       <div class="bigdl">${fmt(dl?.total || 0)}</div>
       ${dl?.versions?.length ? `<table>${dl.versions.map(v => `<tr><td>${esc(v.name)}<span class="hint">${esc(v.date)}</span></td><td class="n">${fmt(v.count)}</td></tr>`).join('')}</table>`
         : '<p class="note">العداد يشتغل من أول نسخة تنزل من المصنع الجديد.</p>'}
+
+      <div class="section">
+        <h3>👥 المستخدمين النشطين</h3>
+        ${(() => { const u = S.usage?.[slug]; if (!u) return '<p class="note">ما قدرت أجيب الأرقام الحين.</p>';
+          const max = Math.max(1, ...u.daily.map(d => d.n));
+          return `<div class="row"><span class="lbl">📲 مرات التثبيت</span><b>${fmt(u.installs)}</b></div>
+            <div class="bars">${u.daily.map((d, i) => `<div class="bar${i === 6 ? ' today' : ''}"><b>${fmt(d.n)}</b><i style="height:${Math.round(d.n / max * 60)}px"></i><span>${esc(d.label)}</span></div>`).join('')}</div>
+            <p class="note">كم جوال فتح التطبيق كل يوم (آخر 7 أيام). يشتغل من نسخة 1.6، والمستخدم يقدر يوقفه من «عن التطبيق».</p>`; })()}
+      </div>
 
       <div class="section">
         <div class="row">

@@ -1,10 +1,8 @@
 name: Publish website
 
-# main holds the site source (site/); the apk-files branch holds the latest
-# APK of every app (one commit, force-pushed, so history stays small).
-# The built site is force-pushed to gh-pages as a single commit.
-# A push to apk-files does not trigger this (that branch has no workflow
-# file), so after updating an APK run this workflow manually.
+# main holds the site source (site/); APKs are GitHub releases of this repo,
+# published by the app factory. The built site is force-pushed to gh-pages
+# as a single commit.
 on:
   push:
     branches: [main]
@@ -25,19 +23,12 @@ jobs:
         with:
           ref: main
 
-      # Older builds were hosted on this branch; new ones are store releases.
-      - uses: actions/checkout@v4
-        continue-on-error: true
-        with:
-          ref: apk-files
-          path: apk-files
-
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
 
       - name: Build site
-        run: APK_DIR="$PWD/apk-files" node site/build.mjs
+        run: node site/build.mjs
 
       - name: Push to gh-pages
         run: |

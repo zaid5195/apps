@@ -23,6 +23,7 @@ const socials = () => {
   const items = [
     l.youtube && `<a class="soc" href="${esc(l.youtube)}" target="_blank" rel="noopener">▶️ يوتيوب</a>`,
     l.tiktok && `<a class="soc" href="${esc(l.tiktok)}" target="_blank" rel="noopener">🎵 تيك توك</a>`,
+    l.support && `<a class="soc support" href="${esc(l.support)}" target="_blank" rel="noopener">💚 ادعمنا</a>`,
   ].filter(Boolean);
   return items.length ? `<div class="socials">${items.join('')}</div>` : '';
 };
@@ -52,6 +53,7 @@ ${body}
 <footer>
   ${socials()}
   <p>التطبيقات مجانية ومصنوعة بالذكاء الاصطناعي بناءً على اقتراحات المتابعين.</p>
+  <p><a href="${up}privacy/">🔒 سياسة الخصوصية</a></p>
 </footer>
 </body>
 </html>
@@ -147,6 +149,39 @@ ${a.signature ? `<section class="official">
 <p class="back"><a href="../">→ كل التطبيقات</a></p>`,
 });
 
+const privacyPage = page({
+  title: `سياسة الخصوصية — ${site.title}`,
+  desc: 'وش تجمع تطبيقاتنا من بيانات، وكيف نستخدمها.',
+  path: '/privacy/',
+  depth: 1,
+  body: `
+<section>
+  <h1>🔒 سياسة الخصوصية</h1>
+  <p class="lead" style="margin-top:8px">باختصار: ما نطلب منك حساب، ما نبيع بياناتك، وما في إعلانات تتبعك.</p>
+  <p class="credit" style="margin-top:6px">آخر تحديث: ${esc(site.privacyUpdated || '')}</p>
+</section>
+<section>
+  <h2>ينطبق على كل تطبيقاتنا</h2>
+  <ul class="features">
+    <li>📱 إعداداتك (مثل لغاتك) تنحفظ على جوالك بس.</li>
+    <li>🎛️ التطبيق يقرأ ملف إعدادات عام من موقعنا ومن GitHub (للصيانة والتحديثات والرسائل). هذا طلب عادي مثل فتح صفحة إنترنت، وما يرسل أي معلومة عنك.</li>
+    <li>📊 إحصائيات مجهولة: التطبيق يرسل «+1» لعدّاد عند أول تشغيل، ومرة باليوم لما تفتحه، عشان نعرف كم واحد يستخدمه. ما يرسل اسمك ولا رقمك ولا أي محتوى، وما في رقم تعريف لجوالك. العداد على خدمة abacus.jasoncameron.dev، ومثل أي موقع تقدر الخدمة تشوف عنوان الإنترنت (IP) وقت الطلب. تقدر توقفها من «عن التطبيق» داخل التطبيق.</li>
+    <li>⬇️ التحميل من GitHub، وهم يعدّون مرات التحميل بس.</li>
+    <li>🚫 ما نشارك بياناتك مع أحد لأغراض إعلانية أو تجارية.</li>
+  </ul>
+</section>
+${apps.filter(a => a.dataUse?.length).map(a => `
+<section>
+  <h2>${esc(a.emoji || '📱')} ${esc(a.name)}</h2>
+  <ul class="features">${a.dataUse.map(d => `<li>${esc(d)}</li>`).join('')}</ul>
+</section>`).join('')}
+<section>
+  <h2>تواصل معنا</h2>
+  <p class="desc">أي سؤال عن خصوصيتك؟ راسلنا على ${site.links?.tiktok ? `<a href="${esc(site.links.tiktok)}" target="_blank" rel="noopener">تيك توك</a>` : 'حساباتنا'}.</p>
+</section>
+<p class="back"><a href="../">→ كل التطبيقات</a></p>`,
+});
+
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 writeFileSync(join(out, 'index.html'), home);
@@ -155,8 +190,8 @@ for (const a of apps) {
   mkdirSync(join(out, a.slug), { recursive: true });
   writeFileSync(join(out, a.slug, 'index.html'), appPage(a));
 }
-// APK files: site/downloads/ (local) or the folder given in APK_DIR (CI, from the apk-files branch).
-const apkDir = process.env.APK_DIR || join(root, 'downloads');
+mkdirSync(join(out, 'privacy'), { recursive: true });
+writeFileSync(join(out, 'privacy', 'index.html'), privacyPage);
 const adminDir = join(root, 'admin');
 if (existsSync(adminDir)) cpSync(adminDir, join(out, 'admin'), { recursive: true });
 const cfgDir = join(root, 'config');
@@ -165,7 +200,9 @@ for (const a of apps) {
   const f = join(out, 'config', `${a.slug}.json`);
   if (existsSync(f)) JSON.parse(readFileSync(f, 'utf8')); // fail the build on a broken control file
 }
-if (existsSync(apkDir)) cpSync(apkDir, join(out, 'downloads'), { recursive: true, filter: s => !s.includes('/.git') });
+// APKs are store releases now; local files are only for an app that has not moved yet.
+const localApks = join(root, 'downloads');
+if (apps.some(a => a.download && !/^https?:\/\//.test(a.download)) && existsSync(localApks)) cpSync(localApks, join(out, 'downloads'), { recursive: true });
 for (const a of apps) {
   if (a.download && !/^https?:\/\//.test(a.download) && !existsSync(join(out, a.download))) throw new Error(`missing file for ${a.slug}: ${a.download}`);
 }

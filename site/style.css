@@ -77,3 +77,5 @@ footer .socials { margin: 0 0 14px; }
 
 .meta .badge.soon { background: rgba(251,191,36,.15); color: #fbbf24; }
 .download.soon { background: rgba(251,191,36,.12); color: #fbbf24; box-shadow: none; font-size: 18px; border: 1px solid rgba(251,191,36,.35); }
+.soc.support { background: rgba(74,222,128,.15); border-color: rgba(74,222,128,.4); color: #4ade80; }
+footer a { color: var(--blue); }
