@@ -25,7 +25,9 @@ jobs:
         with:
           ref: main
 
+      # Older builds were hosted on this branch; new ones are store releases.
       - uses: actions/checkout@v4
+        continue-on-error: true
         with:
           ref: apk-files
           path: apk-files

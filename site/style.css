@@ -74,3 +74,6 @@ footer .socials { margin: 0 0 14px; }
 .official p { color: var(--muted); }
 .sig-label { margin-top: 10px; font-size: 14px; }
 .sig { display: block; direction: ltr; text-align: left; font-size: 12px; word-break: break-all; background: rgba(0,0,0,.35); padding: 10px; border-radius: 10px; color: var(--text); }
+
+.meta .badge.soon { background: rgba(251,191,36,.15); color: #fbbf24; }
+.download.soon { background: rgba(251,191,36,.12); color: #fbbf24; box-shadow: none; font-size: 18px; border: 1px solid rgba(251,191,36,.35); }

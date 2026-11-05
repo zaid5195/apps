@@ -8,7 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;700;900&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0b1220; --card: #141f36; --line: rgba(255,255,255,.1); --text: #f1f5f9;
+    --bg: #0b1220; --card: #141f36; --card2: #18243f; --line: rgba(255,255,255,.1); --text: #f1f5f9;
     --muted: #94a3b8; --accent: #4ade80; --blue: #60a5fa; --red: #f87171; --amber: #fbbf24;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -19,17 +19,28 @@
   h3 { font-size: 16px; font-weight: 800; margin-bottom: 8px; }
   p.sub { color: var(--muted); margin-bottom: 18px; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 16px; margin-bottom: 14px; }
-  .app-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .stat { background: var(--card2); border-radius: 16px; padding: 12px 8px; text-align: center; }
+  .stat b { display: block; font-size: 26px; font-weight: 900; line-height: 1.2; }
+  .stat span { color: var(--muted); font-size: 13px; font-weight: 700; }
+  details.app { background: var(--card); border: 1px solid var(--line); border-radius: 20px; margin-bottom: 14px; overflow: hidden; }
+  details.app[open] { border-color: rgba(74,222,128,.35); }
+  summary { list-style: none; display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer; }
+  summary::-webkit-details-marker { display: none; }
+  summary .chev { margin-right: auto; color: var(--muted); transition: transform .2s; }
+  details[open] summary .chev { transform: rotate(180deg); }
+  .app-body { padding: 0 16px 16px; }
   .icon { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 26px; flex: none; }
-  .status { font-size: 13px; font-weight: 700; padding: 2px 10px; border-radius: 999px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+  .status { font-size: 12px; font-weight: 700; padding: 1px 9px; border-radius: 999px; }
   .ok { background: rgba(74,222,128,.15); color: var(--accent); }
   .bad { background: rgba(248,113,113,.15); color: var(--red); }
   .warn { background: rgba(251,191,36,.15); color: var(--amber); }
+  .info { background: rgba(96,165,250,.15); color: var(--blue); }
   .section { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
   .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; }
   .row .lbl { font-weight: 700; }
-  .row .hint { color: var(--muted); font-size: 13px; font-weight: 500; display: block; }
-  /* switch */
+  .hint { color: var(--muted); font-size: 13px; font-weight: 500; display: block; }
   .sw { position: relative; width: 56px; height: 32px; flex: none; }
   .sw input { opacity: 0; width: 0; height: 0; }
   .sw span { position: absolute; inset: 0; background: #334155; border-radius: 999px; transition: .2s; cursor: pointer; }
@@ -37,21 +48,28 @@
   .sw input:checked + span { background: var(--accent); }
   .sw input:checked + span::before { transform: translateX(-24px); }
   .sw.danger input:checked + span { background: var(--red); }
+  label.f { display: block; font-weight: 700; font-size: 14px; margin-top: 10px; }
   textarea, input[type=text], input[type=password], input[type=url], input[type=number] {
     width: 100%; font: inherit; color: var(--text); background: rgba(0,0,0,.3); border: 1px solid var(--line);
     border-radius: 12px; padding: 10px 12px; margin-top: 6px;
   }
-  input[type=url], input[type=password] { direction: ltr; text-align: left; }
+  input[type=url], input[type=password], input.ltr { direction: ltr; text-align: left; }
   input[type=number] { width: 110px; direction: ltr; text-align: center; }
+  input.emoji { width: 80px; text-align: center; font-size: 22px; }
   textarea { min-height: 70px; resize: vertical; }
   button { font: inherit; font-weight: 800; border: 0; border-radius: 14px; padding: 12px 18px; cursor: pointer; }
   .btn { background: var(--accent); color: #052e16; width: 100%; font-size: 17px; }
   .btn2 { background: rgba(255,255,255,.08); color: var(--text); border: 1px solid var(--line); }
+  .btn3 { background: rgba(248,113,113,.12); color: var(--red); border: 1px solid rgba(248,113,113,.3); }
   .btn:disabled { opacity: .5; }
   .btns { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
   .btns button { flex: 1; }
   .note { color: var(--muted); font-size: 13px; margin-top: 6px; }
   .current-msg { background: rgba(96,165,250,.1); border: 1px solid rgba(96,165,250,.3); border-radius: 12px; padding: 10px; margin-top: 8px; font-size: 14px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 6px; }
+  td { padding: 6px 4px; border-bottom: 1px solid var(--line); }
+  td.n { text-align: left; font-weight: 800; direction: ltr; }
+  .bigdl { font-size: 34px; font-weight: 900; color: var(--accent); }
   ol.steps { padding-right: 20px; display: grid; gap: 8px; margin: 10px 0; }
   ol.steps li::marker { color: var(--accent); font-weight: 900; }
   a { color: var(--blue); }
@@ -63,6 +81,7 @@
   .toast.show { display: block; }
   .top { display: flex; justify-content: space-between; align-items: center; }
   .logout { background: none; color: var(--muted); padding: 6px; font-size: 14px; }
+  .group-title { color: var(--muted); font-weight: 800; font-size: 14px; margin: 18px 4px 8px; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -73,7 +92,7 @@
     <h1>🎛️ لوحة التحكم</h1>
     <button class="logout" id="logout" hidden>تسجيل خروج</button>
   </div>
-  <p class="sub">تحكّم في تطبيقاتك من هنا — التغيير يوصل للناس خلال دقائق بدون تحديث.</p>
+  <p class="sub">تحكّم في كل تطبيقاتك من مكان واحد.</p>
 
   <!-- Login -->
   <section id="login" class="card" hidden>
@@ -94,53 +113,94 @@
   </section>
 
   <section id="loading" class="card" hidden><p>⏳ جاري التحميل…</p></section>
-  <div id="apps"></div>
+
+  <div id="dash" hidden>
+    <section class="card">
+      <div class="stats">
+        <div class="stat"><b id="st-apps">0</b><span>📱 تطبيق متاح</span></div>
+        <div class="stat"><b id="st-dl">0</b><span>⬇️ تحميل</span></div>
+        <div class="stat"><b id="st-soon">0</b><span>🔜 قريباً</span></div>
+      </div>
+      <p class="note" id="st-last"></p>
+    </section>
+
+    <section class="card">
+      <h3>📢 رسالة لكل التطبيقات</h3>
+      <textarea id="bc-text" placeholder="مثال: نزل فيديو جديد على تيك توك! 🎬"></textarea>
+      <input type="url" id="bc-url" placeholder="رابط (اختياري) https://...">
+      <div class="btns"><button class="btn2" id="bc-send">✉️ جهّزها لكل التطبيقات</button></div>
+      <p class="note">تطلع مرة وحدة لكل مستخدم في كل تطبيق متاح.</p>
+    </section>
+
+    <div class="group-title" id="g-live">📱 التطبيقات المتاحة</div>
+    <div id="apps-live"></div>
+    <div class="group-title" id="g-soon">🔜 تطبيقات قادمة</div>
+    <div id="apps-soon"></div>
+
+    <details class="app" id="add">
+      <summary><div class="icon" style="background:#1e293b">➕</div><div><h2>أضف تطبيق قادم</h2><span class="hint">يطلع في الموقع «قريباً» مع اسم صاحب الفكرة</span></div><span class="chev">▾</span></summary>
+      <div class="app-body">
+        <label class="f">اسم التطبيق</label><input type="text" id="new-name" placeholder="مثال: منبّه الصلاة">
+        <label class="f">اسم قصير بالإنجليزي (للرابط)</label><input type="text" class="ltr" id="new-slug" placeholder="prayer-alarm">
+        <label class="f">إيموجي</label><input type="text" class="emoji" id="new-emoji" value="📱" maxlength="4">
+        <label class="f">وصف بسطر</label><input type="text" id="new-tagline" placeholder="وش يسوي التطبيق؟">
+        <label class="f">صاحب الفكرة (اختياري)</label><input type="text" id="new-by" placeholder="@اسم_المتابع">
+        <div class="btns"><button class="btn2" id="new-add">➕ أضفه للقائمة</button></div>
+        <p class="note">لما يجهز التطبيق وينبني في المصنع، يتحول هنا وفي الموقع إلى «متاح» تلقائيًا.</p>
+      </div>
+    </details>
+  </div>
 </main>
 
 <div class="savebar" id="savebar"><div><button class="btn" id="save">💾 حفظ ونشر التغييرات</button></div></div>
 
 <script>
 const OWNER = 'zaid5195', REPO = 'apps', BRANCH = 'main';
-const LIVE = 'https://zaid5195.github.io/apps/config/';
 const API = `https://api.github.com/repos/${OWNER}/${REPO}`;
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = n => Number(n || 0).toLocaleString('ar');
 
-// Pre-fill GitHub's new-token form where supported (unknown params are ignored).
 $('token-link').href = 'https://github.com/settings/personal-access-tokens/new?' + new URLSearchParams({
   name: 'control-panel', description: 'لوحة تحكم التطبيقات', target_name: OWNER, expires_in: '366', contents: 'write'
 });
 
 let token = '';
 try { token = localStorage.getItem('gh_token') || ''; } catch {}
-const state = {}; // slug -> { sha, original, cfg, app }
+const S = { listing: null, configs: {}, downloads: {}, open: new Set() };
 
 function toast(msg, kind = 'ok') {
   const t = $('toast'); t.textContent = msg; t.className = `toast show ${kind}`;
-  clearTimeout(toast.t); toast.t = setTimeout(() => t.className = 'toast', 4000);
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.className = 'toast', 4500);
 }
-
 async function gh(path, opts = {}) {
-  const r = await fetch(API + path, {
-    ...opts,
+  const r = await fetch(path.startsWith('http') ? path : API + path, {
+    ...opts, cache: 'no-store',
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', ...(opts.headers || {}) },
   });
-  if (!r.ok) { const e = new Error(`GitHub ${r.status}`); e.status = r.status; e.body = await r.text(); throw e; }
-  return r.json();
+  if (!r.ok) { const e = new Error(`GitHub ${r.status}`); e.status = r.status; throw e; }
+  return r.status === 204 ? null : r.json();
 }
 const b64decode = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\n/g, '')), c => c.charCodeAt(0)));
 const b64encode = s => { const b = new TextEncoder().encode(s); let x = ''; b.forEach(c => x += String.fromCharCode(c)); return btoa(x); };
-async function readFile(path) {
+async function readJson(path) {
   const f = await gh(`/contents/${path}?ref=${BRANCH}`);
-  return { sha: f.sha, text: b64decode(f.content) };
+  const data = JSON.parse(b64decode(f.content));
+  return { sha: f.sha, data, original: JSON.stringify(data) };
 }
-
-const DEFAULT_CFG = () => ({ maintenance: false, maintenanceMessage: '', minVersionCode: 0, latestVersionCode: 0, updateUrl: '', message: { id: '', text: '', url: '' }, disabledFeatures: [] });
+async function writeJson(path, file, message) {
+  const body = { message, branch: BRANCH, content: b64encode(JSON.stringify(file.data, null, 2) + '\n') };
+  if (file.sha) body.sha = file.sha;
+  const r = await gh(`/contents/${path}`, { method: 'PUT', body: JSON.stringify(body) });
+  file.sha = r.content.sha; file.original = JSON.stringify(file.data);
+}
+const DEFAULT_CFG = slug => ({ maintenance: false, maintenanceMessage: '', minVersionCode: 0, latestVersionCode: 0,
+  updateUrl: `https://zaid5195.github.io/apps/${slug}/`, message: { id: '', text: '', url: '' }, disabledFeatures: [] });
+const isSoon = a => !a.download;
 
 async function login() {
   $('login-err').textContent = '';
-  const v = $('token').value.trim();
-  if (!v) return;
+  const v = $('token').value.trim(); if (!v) return;
   token = v;
   try {
     const repo = await gh('');
@@ -155,21 +215,42 @@ async function login() {
   }
 }
 
+// Download counts come from the store's GitHub releases (one release per app version).
+async function loadDownloads() {
+  const by = {};
+  for (let page = 1; page <= 5; page++) {
+    const rels = await gh(`/releases?per_page=100&page=${page}`);
+    for (const r of rels) for (const a of r.assets || []) {
+      const slug = a.name.replace(/\.apk$/, '');
+      (by[slug] ||= { total: 0, versions: [] });
+      by[slug].total += a.download_count;
+      by[slug].versions.push({ name: r.name || r.tag_name, date: (r.published_at || '').slice(0, 10), count: a.download_count });
+    }
+    if (rels.length < 100) break;
+  }
+  S.downloads = by;
+}
+
 async function start() {
   $('login').hidden = true; $('loading').hidden = false; $('logout').hidden = false;
   try {
-    const apps = JSON.parse((await readFile('site/apps.json')).text).apps;
-    $('apps').innerHTML = '';
-    for (const app of apps) {
-      let sha = null, cfg = DEFAULT_CFG();
-      try { const f = await readFile(`site/config/${app.slug}.json`); sha = f.sha; cfg = { ...cfg, ...JSON.parse(f.text) }; } catch (e) { if (e.status !== 404) throw e; }
-      cfg.message = { id: '', text: '', url: '', ...(cfg.message || {}) };
-      if (!cfg.updateUrl) cfg.updateUrl = `https://zaid5195.github.io/apps/${app.slug}/`;
-      state[app.slug] = { sha, app, cfg, original: JSON.stringify(cfg) };
-      render(app.slug);
+    S.listing = await readJson('site/apps.json');
+    S.configs = {};
+    for (const app of S.listing.data.apps) {
+      if (isSoon(app)) continue;
+      try {
+        const f = await readJson(`site/config/${app.slug}.json`);
+        f.data = { ...DEFAULT_CFG(app.slug), ...f.data }; f.data.message = { id: '', text: '', url: '', ...(f.data.message || {}) };
+        f.original = JSON.stringify(f.data); S.configs[app.slug] = f;
+      } catch (e) {
+        if (e.status !== 404) throw e;
+        const data = DEFAULT_CFG(app.slug); S.configs[app.slug] = { sha: null, data, original: JSON.stringify(data) };
+      }
     }
-    $('loading').hidden = true;
-    checkLive();
+    try { await loadDownloads(); } catch { S.downloads = {}; }
+    try { const lr = (await readJson('site/last-release.json')).data; S.lastRelease = lr; } catch { S.lastRelease = null; }
+    $('loading').hidden = true; $('dash').hidden = false;
+    renderAll();
   } catch (e) {
     $('loading').hidden = true;
     if (e.status === 401) { logout(); $('login-err').textContent = '❌ انتهت صلاحية المفتاح — سو مفتاح جديد.'; }
@@ -177,144 +258,187 @@ async function start() {
   }
 }
 
-function render(slug) {
-  const { app, cfg } = state[slug];
-  let el = document.getElementById(`app-${slug}`);
-  if (!el) { el = document.createElement('section'); el.className = 'card'; el.id = `app-${slug}`; $('apps').appendChild(el); }
-  const controls = app.controls || [];
-  const forced = cfg.minVersionCode > 0 && cfg.minVersionCode >= cfg.latestVersionCode;
+function renderAll() {
+  const apps = S.listing.data.apps;
+  const live = apps.filter(a => !isSoon(a)), soon = apps.filter(isSoon);
+  $('st-apps').textContent = fmt(live.length);
+  $('st-soon').textContent = fmt(soon.length);
+  $('st-dl').textContent = fmt(Object.entries(S.downloads).filter(([s]) => apps.some(a => a.slug === s)).reduce((n, [, d]) => n + d.total, 0));
+  const lr = S.lastRelease;
+  $('st-last').textContent = lr ? `🕒 آخر إصدار: ${lr.apps.map(a => (apps.find(x => x.slug === a.slug)?.name || a.slug) + ' ' + a.versionName).join('، ')} — ${new Date(lr.time).toLocaleString('ar')}` : '';
+  $('g-soon').hidden = !soon.length;
+  $('apps-live').innerHTML = ''; $('apps-soon').innerHTML = '';
+  live.forEach(a => $('apps-live').appendChild(renderApp(a)));
+  soon.forEach(a => $('apps-soon').appendChild(renderApp(a)));
+  dirty();
+}
+
+function renderApp(app) {
+  const slug = app.slug, soon = isSoon(app), cfg = S.configs[slug]?.data, dl = S.downloads[slug];
+  const el = document.createElement('details');
+  el.className = 'app'; el.open = S.open.has(slug);
+  el.addEventListener('toggle', () => el.open ? S.open.add(slug) : S.open.delete(slug));
+  const chips = soon ? '<span class="status warn">🔜 قريباً</span>' :
+    `<span class="status ${cfg.maintenance ? 'bad' : 'ok'}">${cfg.maintenance ? '🛠️ صيانة' : '🟢 شغّال'}</span>
+     <span class="status info">⬇️ ${fmt(dl?.total || 0)}</span>
+     ${app.version ? `<span class="status info">نسخة ${esc(app.version)}</span>` : ''}
+     ${cfg.disabledFeatures.length ? `<span class="status warn">⚙️ ${cfg.disabledFeatures.length} موقفة</span>` : ''}
+     ${cfg.message.text ? '<span class="status info">📢 رسالة</span>' : ''}`;
+  const forced = cfg && cfg.minVersionCode > 0 && cfg.minVersionCode >= cfg.latestVersionCode;
+  const msgSaved = cfg && JSON.parse(S.configs[slug].original).message?.id === cfg.message.id;
   el.innerHTML = `
-    <div class="app-head">
+    <summary>
       <div class="icon" style="background:${esc(app.color || '#2563eb')}">${esc(app.emoji || '📱')}</div>
-      <div style="flex:1">
-        <h2>${esc(app.name)}</h2>
-        <span class="status ${cfg.maintenance ? 'bad' : 'ok'}">${cfg.maintenance ? '🛠️ تحت الصيانة' : '🟢 شغّال'}</span>
-        <span class="status warn" id="live-${slug}" hidden></span>
-      </div>
-    </div>
+      <div><h2>${esc(app.name)}</h2><div class="chips">${chips}</div></div>
+      <span class="chev">▾</span>
+    </summary>
+    <div class="app-body">
+    ${soon ? '' : `
+      <h3>📊 التحميلات</h3>
+      <div class="bigdl">${fmt(dl?.total || 0)}</div>
+      ${dl?.versions?.length ? `<table>${dl.versions.map(v => `<tr><td>${esc(v.name)}<span class="hint">${esc(v.date)}</span></td><td class="n">${fmt(v.count)}</td></tr>`).join('')}</table>`
+        : '<p class="note">العداد يشتغل من أول نسخة تنزل من المصنع الجديد.</p>'}
 
-    <div class="row">
-      <span class="lbl">🛠️ وضع الصيانة<span class="hint">يوقف التطبيق عند كل الناس ويطلع لهم رسالة</span></span>
-      <label class="sw danger"><input type="checkbox" data-k="maintenance" ${cfg.maintenance ? 'checked' : ''}><span></span></label>
-    </div>
-    <div ${cfg.maintenance ? '' : 'hidden'}>
-      <textarea data-k="maintenanceMessage" placeholder="نشتغل على تحسين التطبيق، ويرجع قريب إن شاء الله 🛠️">${esc(cfg.maintenanceMessage)}</textarea>
-    </div>
-
-    ${controls.length ? `<div class="section"><h3>⚙️ المزايا</h3>
-      ${controls.map(c => `<div class="row"><span class="lbl">${esc(c.label)}</span>
-        <label class="sw"><input type="checkbox" data-feature="${esc(c.key)}" ${cfg.disabledFeatures.includes(c.key) ? '' : 'checked'}><span></span></label></div>`).join('')}
-      <p class="note">أخضر = شغّالة. طفّها إذا خربت ميزة وتبي توقفها بس بدون ما توقف التطبيق كله.</p></div>` : ''}
-
-    <div class="section">
-      <h3>📢 رسالة للمستخدمين</h3>
-      ${cfg.message.text ? `<div class="current-msg">${JSON.parse(state[slug].original).message?.id === cfg.message.id ? 'الرسالة الحالية' : '✉️ جاهزة للإرسال (اضغط حفظ)'}: «${esc(cfg.message.text)}» ${cfg.message.url ? '🔗' : ''}</div>` : '<p class="note">ما في رسالة حاليًا.</p>'}
-      <textarea id="msg-${slug}" placeholder="مثال: نزل فيديو جديد على تيك توك! 🎬"></textarea>
-      <input type="url" id="url-${slug}" placeholder="رابط (اختياري) https://...">
-      <div class="btns">
-        <button class="btn2" data-act="send">✉️ جهّز الرسالة</button>
-        ${cfg.message.text ? '<button class="btn2" data-act="clear">🗑️ احذف الرسالة</button>' : ''}
+      <div class="section">
+        <div class="row">
+          <span class="lbl">🛠️ وضع الصيانة<span class="hint">يوقف التطبيق عند كل الناس ويطلع لهم رسالة</span></span>
+          <label class="sw danger"><input type="checkbox" data-k="maintenance" ${cfg.maintenance ? 'checked' : ''}><span></span></label>
+        </div>
+        <div ${cfg.maintenance ? '' : 'hidden'}>
+          <textarea data-k="maintenanceMessage" placeholder="نشتغل على تحسين التطبيق، ويرجع قريب إن شاء الله 🛠️">${esc(cfg.maintenanceMessage)}</textarea>
+        </div>
       </div>
-      <p class="note">تطلع لكل مستخدم مرة وحدة لما يفتح التطبيق.</p>
-    </div>
 
-    <div class="section">
-      <h3>⬆️ التحديثات</h3>
-      <div class="row">
-        <span class="lbl">رقم آخر نسخة<span class="hint">النسخ الأقدم يطلع لها «نسخة جديدة متاحة»</span></span>
-        <input type="number" min="0" data-k="latestVersionCode" value="${cfg.latestVersionCode}">
+      ${(app.controls || []).length ? `<div class="section"><h3>⚙️ المزايا</h3>
+        ${app.controls.map(c => `<div class="row"><span class="lbl">${esc(c.label)}</span>
+          <label class="sw"><input type="checkbox" data-feature="${esc(c.key)}" ${cfg.disabledFeatures.includes(c.key) ? '' : 'checked'}><span></span></label></div>`).join('')}
+        <p class="note">أخضر = شغّالة. طفّها إذا خربت ميزة وتبي توقفها بس.</p></div>` : ''}
+
+      <div class="section">
+        <h3>📢 رسالة للمستخدمين</h3>
+        ${cfg.message.text ? `<div class="current-msg">${msgSaved ? 'الرسالة الحالية' : '✉️ جاهزة للإرسال (اضغط حفظ)'}: «${esc(cfg.message.text)}» ${cfg.message.url ? '🔗' : ''}</div>` : '<p class="note">ما في رسالة حاليًا.</p>'}
+        <textarea data-msg placeholder="مثال: نزل فيديو جديد على تيك توك! 🎬"></textarea>
+        <input type="url" data-msgurl placeholder="رابط (اختياري) https://...">
+        <div class="btns">
+          <button class="btn2" data-act="send">✉️ جهّز الرسالة</button>
+          ${cfg.message.text ? '<button class="btn2" data-act="clear">🗑️ احذف الرسالة</button>' : ''}
+        </div>
       </div>
-      <div class="row">
-        <span class="lbl">إجبار الكل على التحديث<span class="hint">النسخ الأقدم من آخر نسخة ما تشتغل لين يحدّثون</span></span>
-        <label class="sw danger"><input type="checkbox" data-act="force" ${forced ? 'checked' : ''}><span></span></label>
+
+      <div class="section">
+        <h3>⬆️ التحديثات</h3>
+        <div class="row">
+          <span class="lbl">رقم آخر نسخة<span class="hint">يتحدّث تلقائيًا من المصنع — النسخ الأقدم يطلع لها «نسخة جديدة متاحة»</span></span>
+          <input type="number" min="0" data-k="latestVersionCode" value="${cfg.latestVersionCode}">
+        </div>
+        <div class="row">
+          <span class="lbl">إجبار الكل على التحديث<span class="hint">للطوارئ بس: النسخ الأقدم ما تشتغل لين يحدّثون</span></span>
+          <label class="sw danger"><input type="checkbox" data-act="force" ${forced ? 'checked' : ''}><span></span></label>
+        </div>
+      </div>`}
+
+      <div class="section" ${soon ? 'style="border:0;margin-top:0;padding-top:0"' : ''}>
+        <h3>📝 صفحة التطبيق في الموقع</h3>
+        <label class="f">اسم التطبيق</label><input type="text" data-p="name" value="${esc(app.name)}">
+        <label class="f">إيموجي</label><input type="text" class="emoji" data-p="emoji" value="${esc(app.emoji || '📱')}" maxlength="4">
+        <label class="f">وصف بسطر</label><input type="text" data-p="tagline" value="${esc(app.tagline || '')}">
+        <label class="f">💡 صاحب الفكرة</label><input type="text" data-p="suggestedBy" value="${esc(app.suggestedBy || '')}" placeholder="@اسم_المتابع">
+        <label class="f">🎬 رابط فيديو التطبيق (تيك توك)</label><input type="url" data-p="video" value="${esc(app.video || '')}" placeholder="https://www.tiktok.com/@uryon29/video/...">
+        ${soon ? '<div class="btns"><button class="btn3" data-act="remove">🗑️ احذفه من القائمة</button></div>' : ''}
       </div>
-      <p class="note">رقم آخر نسخة أحدّثه أنا مع كل إصدار. استخدم الإجبار بس إذا النسخة القديمة فيها مشكلة خطيرة.</p>
     </div>`;
 
   el.querySelectorAll('[data-k]').forEach(inp => inp.addEventListener(inp.type === 'checkbox' ? 'change' : 'input', () => {
     const k = inp.dataset.k;
-    if (inp.type === 'number' && inp.value.trim() === '') return; // ignore an empty box while typing
-    cfg[k] = inp.type === 'checkbox' ? inp.checked : inp.type === 'number' ? Math.max(0, parseInt(inp.value || '0', 10)) : inp.value;
-    if (k === 'maintenance') render(slug);
+    if (inp.type === 'number' && inp.value.trim() === '') return;
+    cfg[k] = inp.type === 'checkbox' ? inp.checked : inp.type === 'number' ? Math.max(0, parseInt(inp.value, 10) || 0) : inp.value;
     if (k === 'latestVersionCode' && cfg.minVersionCode > 0) cfg.minVersionCode = cfg.latestVersionCode;
+    if (k === 'maintenance') return renderAll();
     dirty();
   }));
-  el.querySelectorAll('input[type=number]').forEach(inp => inp.addEventListener('blur', () => {
-    if (inp.value.trim() === '') inp.value = cfg[inp.dataset.k];
-  }));
+  el.querySelectorAll('input[type=number]').forEach(inp => inp.addEventListener('blur', () => { if (inp.value.trim() === '') inp.value = cfg[inp.dataset.k]; }));
   el.querySelectorAll('[data-feature]').forEach(inp => inp.addEventListener('change', () => {
-    const k = inp.dataset.feature, set = new Set(cfg.disabledFeatures);
-    inp.checked ? set.delete(k) : set.add(k);
-    cfg.disabledFeatures = [...set]; dirty();
+    const set = new Set(cfg.disabledFeatures); inp.checked ? set.delete(inp.dataset.feature) : set.add(inp.dataset.feature);
+    cfg.disabledFeatures = [...set]; renderAll();
   }));
-  el.querySelector('[data-act=force]').addEventListener('change', e => {
-    cfg.minVersionCode = e.target.checked ? cfg.latestVersionCode : 0; dirty();
-  });
-  el.querySelector('[data-act=send]').addEventListener('click', () => {
-    const text = $(`msg-${slug}`).value.trim(), url = $(`url-${slug}`).value.trim();
+  el.querySelector('[data-act=force]')?.addEventListener('change', e => { cfg.minVersionCode = e.target.checked ? cfg.latestVersionCode : 0; dirty(); });
+  el.querySelector('[data-act=send]')?.addEventListener('click', () => {
+    const text = el.querySelector('[data-msg]').value.trim(), url = el.querySelector('[data-msgurl]').value.trim();
     if (!text) return toast('اكتب الرسالة أول ✍️', 'warn');
     if (url && !/^https?:\/\//.test(url)) return toast('الرابط لازم يبدأ بـ https://', 'warn');
-    cfg.message = { id: 'msg-' + Date.now(), text, url };
-    render(slug); dirty(); toast('تمام — اضغط «حفظ ونشر» تحت عشان ترسلها');
+    cfg.message = { id: 'msg-' + Date.now(), text, url }; renderAll(); toast('تمام — اضغط «حفظ ونشر» تحت عشان ترسلها');
   });
-  el.querySelector('[data-act=clear]')?.addEventListener('click', () => {
-    cfg.message = { id: '', text: '', url: '' }; render(slug); dirty();
+  el.querySelector('[data-act=clear]')?.addEventListener('click', () => { cfg.message = { id: '', text: '', url: '' }; renderAll(); });
+  el.querySelectorAll('[data-p]').forEach(inp => inp.addEventListener('input', () => {
+    const v = inp.value.trim(); v ? app[inp.dataset.p] = v : delete app[inp.dataset.p];
+    if (inp.dataset.p === 'name' && !v) app.name = inp.defaultValue; dirty();
+  }));
+  el.querySelector('[data-act=remove]')?.addEventListener('click', () => {
+    if (!confirm(`تحذف «${app.name}» من القائمة؟`)) return;
+    S.listing.data.apps = S.listing.data.apps.filter(a => a !== app); renderAll();
   });
+  return el;
 }
 
-function changed() { return Object.values(state).filter(s => JSON.stringify(s.cfg) !== s.original); }
-function dirty() { $('savebar').classList.toggle('show', changed().length > 0); }
+$('bc-send').addEventListener('click', () => {
+  const text = $('bc-text').value.trim(), url = $('bc-url').value.trim();
+  if (!text) return toast('اكتب الرسالة أول ✍️', 'warn');
+  if (url && !/^https?:\/\//.test(url)) return toast('الرابط لازم يبدأ بـ https://', 'warn');
+  const id = 'msg-' + Date.now();
+  Object.values(S.configs).forEach(f => f.data.message = { id, text, url });
+  $('bc-text').value = ''; $('bc-url').value = '';
+  renderAll(); toast('تمام — اضغط «حفظ ونشر» تحت عشان ترسلها لكل التطبيقات');
+});
+
+$('new-add').addEventListener('click', () => {
+  const name = $('new-name').value.trim();
+  const slug = $('new-slug').value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  if (!name) return toast('اكتب اسم التطبيق', 'warn');
+  if (!slug) return toast('اكتب اسم قصير بالإنجليزي (حروف وأرقام)', 'warn');
+  if (S.listing.data.apps.some(a => a.slug === slug)) return toast('هذا الاسم الإنجليزي مستخدم، اختر غيره', 'warn');
+  const app = { slug, name, emoji: $('new-emoji').value.trim() || '📱', color: '#7c3aed', tagline: $('new-tagline').value.trim(), status: 'قريباً' };
+  const by = $('new-by').value.trim(); if (by) app.suggestedBy = by;
+  S.listing.data.apps.push(app);
+  ['new-name', 'new-slug', 'new-tagline', 'new-by'].forEach(id => $(id).value = ''); $('add').open = false;
+  renderAll(); toast('انضاف — اضغط «حفظ ونشر» عشان يطلع في الموقع');
+});
+
+function changes() {
+  const cfgs = Object.entries(S.configs).filter(([, f]) => JSON.stringify(f.data) !== f.original);
+  const listing = S.listing && JSON.stringify(S.listing.data) !== S.listing.original;
+  return { cfgs, listing, any: cfgs.length > 0 || listing };
+}
+function dirty() { $('savebar').classList.toggle('show', changes().any); }
 
 async function save() {
-  const list = changed(); if (!list.length) return;
+  const ch = changes(); if (!ch.any) return;
   $('save').disabled = true; $('save').textContent = '⏳ جاري الحفظ…';
   try {
-    for (const s of list) {
-      const body = { message: `لوحة التحكم: تحديث إعدادات ${s.app.name}`, content: b64encode(JSON.stringify(s.cfg, null, 2) + '\n'), branch: BRANCH };
-      if (s.sha) body.sha = s.sha;
-      const r = await gh(`/contents/site/config/${s.app.slug}.json`, { method: 'PUT', body: JSON.stringify(body) });
-      s.sha = r.content.sha; s.original = JSON.stringify(s.cfg);
-      render(s.app.slug);
+    for (const [slug, f] of ch.cfgs) {
+      const name = S.listing.data.apps.find(a => a.slug === slug)?.name || slug;
+      await writeJson(`site/config/${slug}.json`, f, `لوحة التحكم: تحديث إعدادات ${name}`);
     }
-    dirty();
-    toast('✅ انحفظ! يوصل للتطبيقات خلال 5–10 دقائق');
-    checkLive(true);
+    if (ch.listing) await writeJson('site/apps.json', S.listing, 'لوحة التحكم: تحديث صفحات التطبيقات');
+    renderAll();
+    toast(ch.listing ? '✅ انحفظ! التطبيقات تستلمه خلال دقيقة، والموقع يتحدّث خلال دقائق' : '✅ انحفظ! يوصل للتطبيقات خلال دقيقة تقريبًا');
   } catch (e) {
-    toast(e.status === 409 ? '⚠️ الإعدادات تغيّرت من مكان ثاني — حدّث الصفحة وحاول مرة ثانية' :
+    toast(e.status === 409 ? '⚠️ فيه تغيير جديد من مكان ثاني (مثلاً المصنع) — حدّث الصفحة وأعد التعديل' :
       e.status === 401 ? '❌ انتهت صلاحية المفتاح — سجّل خروج وادخل بمفتاح جديد' : '❌ ما انحفظ، حاول مرة ثانية', 'bad');
   } finally {
     $('save').disabled = false; $('save').textContent = '💾 حفظ ونشر التغييرات';
   }
 }
 
-// Shows whether what the apps currently read (the live site) matches what is saved.
-async function checkLive(poll = false) {
-  for (let i = 0; i < (poll ? 40 : 1); i++) {
-    let pending = 0;
-    for (const s of Object.values(state)) {
-      const badge = $(`live-${s.app.slug}`); if (!badge) continue;
-      try {
-        const live = await (await fetch(`${LIVE}${s.app.slug}.json?t=${Date.now()}`, { cache: 'no-store' })).json();
-        const same = JSON.stringify({ ...DEFAULT_CFG(), ...live, message: { id: '', text: '', url: '', ...(live.message || {}) } }) === s.original;
-        badge.hidden = same; badge.textContent = '⏳ التغيير في الطريق للتطبيقات…';
-        if (!same) pending++;
-      } catch { badge.hidden = true; }
-    }
-    if (!pending) { if (poll) toast('✅ وصل التغيير للتطبيقات'); return; }
-    await new Promise(r => setTimeout(r, 15000));
-  }
-}
-
 function logout() {
   try { localStorage.removeItem('gh_token'); } catch {}
-  token = ''; $('apps').innerHTML = ''; $('login').hidden = false; $('logout').hidden = true; $('savebar').classList.remove('show');
+  token = ''; $('dash').hidden = true; $('login').hidden = false; $('logout').hidden = true; $('savebar').classList.remove('show');
 }
 
 $('login-btn').addEventListener('click', login);
 $('token').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
 $('save').addEventListener('click', save);
 $('logout').addEventListener('click', logout);
-window.addEventListener('beforeunload', e => { if (changed().length) e.preventDefault(); });
+window.addEventListener('beforeunload', e => { if (S.listing && changes().any) e.preventDefault(); });
 token ? start() : ($('login').hidden = false);
 </script>
 </body>

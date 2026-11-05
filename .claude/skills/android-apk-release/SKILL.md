@@ -14,7 +14,7 @@ description: سير عمل كامل لبناء تطبيقات أندرويد أ�
 
 ## الهيكل: مصنع + متجر
 - **المصنع** `zaid5195/hhh` (قد يكون خاصًا): كل تطبيق في `apps/<slug>/` = مشروع Gradle مستقل (`settings.gradle.kts`، `build.gradle.kts`، `gradle.properties`، `app/`) + `factory.json` (`slug`, `name`). الـ`gradlew` ومجلد `gradle/` مشتركان في الجذر: `./gradlew -p apps/<slug> assembleRelease`.
-- **سير `.github/workflows/build.yml` (App factory)**: يكتشف التطبيقات المتغيّرة (`.github/factory/detect.py`)، يبني كل واحد في job مستقل (`fail-fast: false`)، وعلى الفرع الافتراضي job واحد ينشرها كلها للمتجر (`.github/factory/publish.py`): يحدّث فرع `apk-files` (commit واحد فيه آخر APK لكل تطبيق)، و`latestVersionCode` في `site/config/<slug>.json`، و`version` في `site/apps.json`، ثم يدفع `main` فيُعاد بناء الموقع.
+- **سير `.github/workflows/build.yml` (App factory)**: يكتشف التطبيقات المتغيّرة (`.github/factory/detect.py`)، يبني كل واحد في job مستقل (`fail-fast: false`)، وعلى الفرع الافتراضي job واحد ينشرها كلها للمتجر (`.github/factory/publish.py`): يرفع كل APK كـ Release في `zaid5195/apps` (tag `<slug>-v<versionCode>`؛ GitHub يعدّ التحميلات ولوحة التحكم تعرضها) ويضع رابطه في `download`، و`latestVersionCode` في `site/config/<slug>.json`، و`version` في `site/apps.json`، ثم يدفع `main` فيُعاد بناء الموقع.
 - **المتجر** `zaid5195/apps` (عام): الموقع وصفحات التطبيقات ولوحة التحكم https://zaid5195.github.io/apps/admin/. لا تضع فيه أي رابط لمستودع المصنع.
 - الأسرار في المصنع: `RELEASE_KEYSTORE_BASE64`، `RELEASE_KEYSTORE_PASSWORD`، `APPS_STORE_TOKEN` (توكن بصلاحية Contents على `apps` فقط؛ ينتهي بعد مدة — إذا فشل النشر بخطأ 401 اطلب من المستخدم توكن جديد).
 
@@ -32,9 +32,11 @@ description: سير عمل كامل لبناء تطبيقات أندرويد أ�
 3. **تحقّق من البناء**: ادفع ثم تابع «App factory» بأدوات `mcp__github__actions_list` / `mcp__github__get_job_logs`. لا تقل "جاهز" قبل نجاحه. (إن وُجد Android SDK محليًا: `./gradlew -p apps/<slug> assembleDebug`.)
 4. حدّث `README.md` (بالعربية) إن تغيّرت طريقة الاستخدام.
 5. **المتجر** (`add_repo` لـ `zaid5195/apps` بصلاحية push ثم استنسخه):
-   - تطبيق جديد: أضف عنصره في `site/apps.json` (slug، الاسم، emoji، لون، وصف، مزايا، خطوات، `"download": "downloads/<slug>.apk"`، `controls`، `suggestedBy` باسم المتابع صاحب الفكرة، `video` إن نُشر الفيديو) **بعد** أول نشر ناجح من المصنع (بناء الموقع يفشل إذا ملف الـAPK غير موجود). المصنع ينشئ ملف التحكم تلقائيًا.
+   - المستخدم يقدر يضيف تطبيق «قريباً» من لوحة التحكم (عنصر بدون `download`)؛ إذا موجود استخدم نفس الـslug في المصنع، والنشر الأول يحوّله «متاح» تلقائيًا.
+   - تطبيق جديد غير مضاف: أضف عنصره في `site/apps.json` (slug، الاسم، emoji، لون، وصف، مزايا، خطوات، `"download": "downloads/<slug>.apk"`، `controls`، `suggestedBy` باسم المتابع صاحب الفكرة، `video` إن نُشر الفيديو) (بدون `download` يظهر «قريباً» لين أول نشر). المصنع ينشئ ملف التحكم تلقائيًا.
    - تحديث: المصنع يحدّث الرقم وحده؛ عدّل المزايا/الوصف يدويًا إن تغيّرت.
    - بعد الدمج: تحقق أن صفحة التطبيق ورابط `https://zaid5195.github.io/apps/downloads/<slug>.apk` يرجعان 200، وأن بصمة توقيع الملف المحمّل `DC:30:1E:4E…`.
+   - التطبيق يقرأ ملف التحكم من GitHub API أولًا (يوصل التغيير خلال ثوانٍ)، ثم raw.githubusercontent، ثم الموقع — انسخ نفس `SOURCES` في `RemoteConfig.kt` لأي تطبيق جديد.
 6. أنهِ الرد برسالة قصيرة بالعربية فيها:
    - ماذا تغيّر (نقاط قليلة بلغة المستخدم، لا بلغة الكود).
    - رقم النسخة الجديدة، ورابط صفحة التطبيق في الموقع للتحميل والتثبيت فوق القديمة (بلا حذف).

@@ -12,7 +12,9 @@ const { site, apps } = data;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 for (const a of apps) {
-  for (const k of ['slug', 'name', 'download']) if (!a[k]) throw new Error(`app missing "${k}": ${JSON.stringify(a)}`);
+  // "Coming soon" apps (announced from the control panel) have no download yet.
+  a.comingSoon = !a.download;
+  for (const k of ['slug', 'name']) if (!a[k]) throw new Error(`app missing "${k}": ${JSON.stringify(a)}`);
   if (!/^[a-z0-9-]+$/.test(a.slug)) throw new Error(`bad slug: ${a.slug}`);
 }
 
@@ -65,14 +67,15 @@ const card = a => `
       <h3>${esc(a.name)}</h3>
       <p>${esc(a.tagline)}</p>
       <div class="meta">
-        <span class="badge">${esc(a.status || 'متاح')}</span>
-        ${a.version ? `<span>نسخة ${esc(a.version)}</span>` : ''}
+        <span class="badge${a.comingSoon ? ' soon' : ''}">${esc(a.comingSoon ? 'قريباً 🔜' : (a.status || 'متاح'))}</span>
+        ${a.version && !a.comingSoon ? `<span>نسخة ${esc(a.version)}</span>` : ''}
         ${a.suggestedBy ? `<span>💡 اقتراح ${esc(a.suggestedBy)}</span>` : ''}
       </div>
     </div>
   </a>`;
 
-const sorted = [...apps].sort((x, y) => String(y.released || '').localeCompare(String(x.released || '')));
+// Available apps first (newest first), then the ones coming soon.
+const sorted = [...apps].sort((x, y) => (x.comingSoon - y.comingSoon) || String(y.released || '').localeCompare(String(x.released || '')));
 
 const home = page({
   title: `${site.title} — ${site.tagline}`,
@@ -113,18 +116,20 @@ const appPage = a => page({
   <h1>${esc(a.name)}</h1>
   <p class="lead">${esc(a.tagline)}</p>
   <div class="meta center">
-    <span class="badge">${esc(a.status || 'متاح')}</span>
-    ${a.version ? `<span>نسخة ${esc(a.version)}</span>` : ''}
+    <span class="badge${a.comingSoon ? ' soon' : ''}">${esc(a.comingSoon ? 'قريباً 🔜' : (a.status || 'متاح'))}</span>
+    ${a.version && !a.comingSoon ? `<span>نسخة ${esc(a.version)}</span>` : ''}
     ${a.platform ? `<span>${esc(a.platform)}</span>` : ''}
   </div>
-  <a class="download" href="${esc(dl(a, 1))}" download>⬇️ تحميل التطبيق مجانًا</a>
+  ${a.comingSoon
+    ? `<div class="download soon">🔜 قيد الصنع — تابعنا على تيك توك عشان تعرف أول ما ينزل</div>`
+    : `<a class="download" href="${esc(dl(a, 1))}">⬇️ تحميل التطبيق مجانًا</a>`}
   ${a.suggestedBy ? `<p class="credit">💡 فكرة التطبيق من: <b>${esc(a.suggestedBy)}</b></p>` : ''}
 </section>
 ${a.description ? `<section><p class="desc">${esc(a.description)}</p></section>` : ''}
 ${a.video ? `<section><a class="video" href="${esc(a.video)}" target="_blank" rel="noopener">🎬 شوف فيديو التطبيق</a></section>` : ''}
 ${a.features?.length ? `<section><h2>المزايا</h2><ul class="features">${a.features.map(f => `<li>${esc(f)}</li>`).join('')}</ul></section>` : ''}
 ${a.howTo?.length ? `<section><h2>طريقة الاستخدام</h2><ol class="howto">${a.howTo.map(s => `<li>${esc(s)}</li>`).join('')}</ol></section>` : ''}
-<section class="install">
+${a.comingSoon ? '' : `<section class="install">
   <h2>طريقة التثبيت</h2>
   <ol class="howto">
     <li>اضغط «تحميل التطبيق» وانتظر ينزل الملف</li>
@@ -132,7 +137,7 @@ ${a.howTo?.length ? `<section><h2>طريقة الاستخدام</h2><ol class="h
     <li>إذا طلب منك، اسمح بـ «التثبيت من مصادر غير معروفة»</li>
     <li>اضغط «تثبيت» — وللتحديث نزّل النسخة الجديدة وثبّتها فوق القديمة</li>
   </ol>
-</section>
+</section>`}
 ${a.signature ? `<section class="official">
   <h2>✅ نسخة رسمية</h2>
   <p>كل تطبيقاتنا موقّعة بمفتاح المطوّر ${esc(site.developer || '')}. التطبيق نفسه يتأكد من توقيعه، وتلقى في «عن التطبيق» كلمة «نسخة رسمية». إذا لقيت نسخة من مكان ثاني، أندرويد ما راح يقبلها كتحديث لتطبيقنا.</p>
@@ -162,6 +167,6 @@ for (const a of apps) {
 }
 if (existsSync(apkDir)) cpSync(apkDir, join(out, 'downloads'), { recursive: true, filter: s => !s.includes('/.git') });
 for (const a of apps) {
-  if (!/^https?:\/\//.test(a.download) && !existsSync(join(out, a.download))) throw new Error(`missing file for ${a.slug}: ${a.download}`);
+  if (a.download && !/^https?:\/\//.test(a.download) && !existsSync(join(out, a.download))) throw new Error(`missing file for ${a.slug}: ${a.download}`);
 }
 console.log(`Built ${apps.length} app page(s) into ${out}`);
