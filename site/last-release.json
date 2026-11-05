@@ -1,11 +1,11 @@
 {
-  "time": "2026-11-05T22:38:55Z",
+  "time": "2026-11-05T23:28:47Z",
   "apps": [
     {
       "slug": "floating-translator",
-      "versionName": "1.5",
-      "versionCode": 6,
-      "download": "https://github.com/zaid5195/apps/releases/download/floating-translator-v6/floating-translator.apk"
+      "versionName": "1.6",
+      "versionCode": 7,
+      "download": "https://github.com/zaid5195/apps/releases/download/floating-translator-v7/floating-translator.apk"
     }
   ]
 }
