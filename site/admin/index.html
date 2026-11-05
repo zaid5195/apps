@@ -233,10 +233,14 @@ function render(slug) {
 
   el.querySelectorAll('[data-k]').forEach(inp => inp.addEventListener(inp.type === 'checkbox' ? 'change' : 'input', () => {
     const k = inp.dataset.k;
+    if (inp.type === 'number' && inp.value.trim() === '') return; // ignore an empty box while typing
     cfg[k] = inp.type === 'checkbox' ? inp.checked : inp.type === 'number' ? Math.max(0, parseInt(inp.value || '0', 10)) : inp.value;
     if (k === 'maintenance') render(slug);
     if (k === 'latestVersionCode' && cfg.minVersionCode > 0) cfg.minVersionCode = cfg.latestVersionCode;
     dirty();
+  }));
+  el.querySelectorAll('input[type=number]').forEach(inp => inp.addEventListener('blur', () => {
+    if (inp.value.trim() === '') inp.value = cfg[inp.dataset.k];
   }));
   el.querySelectorAll('[data-feature]').forEach(inp => inp.addEventListener('change', () => {
     const k = inp.dataset.feature, set = new Set(cfg.disabledFeatures);
