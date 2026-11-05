@@ -40,7 +40,7 @@ description: سير عمل كامل لبناء تطبيقات أندرويد أ�
 
 ## ما يجب أن يحتويه كل تطبيق (منسوخ من المترجم العائم)
 - **`Ownership.kt`**: يقارن بصمة توقيع الـAPK بـ `OFFICIAL_SHA256`، ويظهر تحذير «نسخة غير رسمية» أعلى الشاشة الرئيسية إن لم تطابق.
-- **`RemoteConfig.kt`**: يقرأ `https://zaid5195.github.io/apps/config/<slug>.json` (في `zaid5195/apps` تحت `site/config/`) عند فتح التطبيق ويخزّنه: صيانة، `minVersionCode` (تحديث إجباري)، `latestVersionCode` (تحديث متاح)، رسالة لمرة وحدة، و`disabledFeatures` بمفاتيح خاصة بكل تطبيق. يعمل بدون إنترنت (fail open). أنشئ ملف التحكم للتطبيق الجديد ووثّق مفاتيح مزاياه في README مستودع `apps`.
+- **`RemoteConfig.kt`**: يقرأ `https://zaid5195.github.io/apps/config/<slug>.json` (في `zaid5195/apps` تحت `site/config/`) عند فتح التطبيق ويخزّنه: صيانة، `minVersionCode` (تحديث إجباري)، `latestVersionCode` (تحديث متاح)، رسالة لمرة وحدة، و`disabledFeatures` بمفاتيح خاصة بكل تطبيق. يعمل بدون إنترنت (fail open). أنشئ ملف التحكم للتطبيق الجديد، وأضف مفاتيح مزاياه في `controls` (key + label عربي) داخل عنصر التطبيق في `site/apps.json` حتى تظهر كأزرار في لوحة التحكم https://zaid5195.github.io/apps/admin/.
 - **بطاقة «عن التطبيق»**: النسخة، «صنعه @uryon29 بمساعدة Claude»، اسم المتابع صاحب الفكرة إن وُجد، حقوق النشر، وأزرار تيك توك وموقع التطبيقات.
 - عند كل إصدار: حدّث `latestVersionCode` في ملف التحكم، وارفع `minVersionCode` فقط إذا النسخ القديمة فيها مشكلة خطيرة.
 

@@ -152,6 +152,8 @@ for (const a of apps) {
 }
 // APK files: site/downloads/ (local) or the folder given in APK_DIR (CI, from the apk-files branch).
 const apkDir = process.env.APK_DIR || join(root, 'downloads');
+const adminDir = join(root, 'admin');
+if (existsSync(adminDir)) cpSync(adminDir, join(out, 'admin'), { recursive: true });
 const cfgDir = join(root, 'config');
 if (existsSync(cfgDir)) cpSync(cfgDir, join(out, 'config'), { recursive: true });
 for (const a of apps) {

@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>لوحة التحكم</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b1220; --card: #141f36; --line: rgba(255,255,255,.1); --text: #f1f5f9;
+    --muted: #94a3b8; --accent: #4ade80; --blue: #60a5fa; --red: #f87171; --amber: #fbbf24;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Cairo', system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; min-height: 100vh; }
+  main { max-width: 640px; margin: 0 auto; padding: 16px 16px 120px; }
+  h1 { font-size: 26px; font-weight: 900; margin: 10px 0 4px; }
+  h2 { font-size: 20px; font-weight: 800; }
+  h3 { font-size: 16px; font-weight: 800; margin-bottom: 8px; }
+  p.sub { color: var(--muted); margin-bottom: 18px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 16px; margin-bottom: 14px; }
+  .app-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .icon { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 26px; flex: none; }
+  .status { font-size: 13px; font-weight: 700; padding: 2px 10px; border-radius: 999px; }
+  .ok { background: rgba(74,222,128,.15); color: var(--accent); }
+  .bad { background: rgba(248,113,113,.15); color: var(--red); }
+  .warn { background: rgba(251,191,36,.15); color: var(--amber); }
+  .section { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; }
+  .row .lbl { font-weight: 700; }
+  .row .hint { color: var(--muted); font-size: 13px; font-weight: 500; display: block; }
+  /* switch */
+  .sw { position: relative; width: 56px; height: 32px; flex: none; }
+  .sw input { opacity: 0; width: 0; height: 0; }
+  .sw span { position: absolute; inset: 0; background: #334155; border-radius: 999px; transition: .2s; cursor: pointer; }
+  .sw span::before { content: ""; position: absolute; width: 24px; height: 24px; top: 4px; right: 4px; background: #fff; border-radius: 50%; transition: .2s; }
+  .sw input:checked + span { background: var(--accent); }
+  .sw input:checked + span::before { transform: translateX(-24px); }
+  .sw.danger input:checked + span { background: var(--red); }
+  textarea, input[type=text], input[type=password], input[type=url], input[type=number] {
+    width: 100%; font: inherit; color: var(--text); background: rgba(0,0,0,.3); border: 1px solid var(--line);
+    border-radius: 12px; padding: 10px 12px; margin-top: 6px;
+  }
+  input[type=url], input[type=password] { direction: ltr; text-align: left; }
+  input[type=number] { width: 110px; direction: ltr; text-align: center; }
+  textarea { min-height: 70px; resize: vertical; }
+  button { font: inherit; font-weight: 800; border: 0; border-radius: 14px; padding: 12px 18px; cursor: pointer; }
+  .btn { background: var(--accent); color: #052e16; width: 100%; font-size: 17px; }
+  .btn2 { background: rgba(255,255,255,.08); color: var(--text); border: 1px solid var(--line); }
+  .btn:disabled { opacity: .5; }
+  .btns { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .btns button { flex: 1; }
+  .note { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .current-msg { background: rgba(96,165,250,.1); border: 1px solid rgba(96,165,250,.3); border-radius: 12px; padding: 10px; margin-top: 8px; font-size: 14px; }
+  ol.steps { padding-right: 20px; display: grid; gap: 8px; margin: 10px 0; }
+  ol.steps li::marker { color: var(--accent); font-weight: 900; }
+  a { color: var(--blue); }
+  code { direction: ltr; unicode-bidi: embed; background: rgba(0,0,0,.35); padding: 1px 6px; border-radius: 6px; font-size: 13px; }
+  .savebar { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(11,18,32,.95); border-top: 1px solid var(--line); padding: 12px 16px; display: none; backdrop-filter: blur(6px); }
+  .savebar.show { display: block; }
+  .savebar div { max-width: 640px; margin: 0 auto; }
+  .toast { background: #0f172a; border: 1px solid var(--line); box-shadow: 0 10px 30px rgba(0,0,0,.5); position: fixed; top: 16px; left: 16px; right: 16px; max-width: 600px; margin: 0 auto; padding: 12px 16px; border-radius: 14px; font-weight: 700; display: none; z-index: 10; text-align: center; }
+  .toast.show { display: block; }
+  .top { display: flex; justify-content: space-between; align-items: center; }
+  .logout { background: none; color: var(--muted); padding: 6px; font-size: 14px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="toast" id="toast"></div>
+<main>
+  <div class="top">
+    <h1>🎛️ لوحة التحكم</h1>
+    <button class="logout" id="logout" hidden>تسجيل خروج</button>
+  </div>
+  <p class="sub">تحكّم في تطبيقاتك من هنا — التغيير يوصل للناس خلال دقائق بدون تحديث.</p>
+
+  <!-- Login -->
+  <section id="login" class="card" hidden>
+    <h2>🔑 الدخول (مرة وحدة بس)</h2>
+    <p class="note" style="font-size:15px">اللوحة تحتاج «مفتاح دخول» من GitHub عشان تقدر تعدّل إعدادات تطبيقاتك. المفتاح يبقى في متصفح جوالك بس، وما يقدر أحد غيرك يستخدم اللوحة بدونه.</p>
+    <ol class="steps">
+      <li>افتح <a id="token-link" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">صفحة إنشاء المفتاح في GitHub</a>.</li>
+      <li>في <b>Token name</b> اكتب: <code>control-panel</code></li>
+      <li>في <b>Expiration</b> اختر مدة طويلة (مثلاً 1 year).</li>
+      <li>في <b>Repository access</b> اختر <b>Only select repositories</b> ثم اختر <code>apps</code>.</li>
+      <li>في <b>Permissions</b> ← <b>Repository permissions</b> ← <b>Contents</b> اختر <b>Read and write</b>.</li>
+      <li>انزل تحت واضغط <b>Generate token</b>، وانسخ المفتاح (يبدأ بـ <code>github_pat_</code>).</li>
+      <li>الصقه هنا واضغط دخول.</li>
+    </ol>
+    <input type="password" id="token" placeholder="github_pat_..." autocomplete="off">
+    <div class="btns"><button class="btn" id="login-btn">دخول</button></div>
+    <p class="note" id="login-err"></p>
+  </section>
+
+  <section id="loading" class="card" hidden><p>⏳ جاري التحميل…</p></section>
+  <div id="apps"></div>
+</main>
+
+<div class="savebar" id="savebar"><div><button class="btn" id="save">💾 حفظ ونشر التغييرات</button></div></div>
+
+<script>
+const OWNER = 'zaid5195', REPO = 'apps', BRANCH = 'main';
+const LIVE = 'https://zaid5195.github.io/apps/config/';
+const API = `https://api.github.com/repos/${OWNER}/${REPO}`;
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// Pre-fill GitHub's new-token form where supported (unknown params are ignored).
+$('token-link').href = 'https://github.com/settings/personal-access-tokens/new?' + new URLSearchParams({
+  name: 'control-panel', description: 'لوحة تحكم التطبيقات', target_name: OWNER, expires_in: '366', contents: 'write'
+});
+
+let token = '';
+try { token = localStorage.getItem('gh_token') || ''; } catch {}
+const state = {}; // slug -> { sha, original, cfg, app }
+
+function toast(msg, kind = 'ok') {
+  const t = $('toast'); t.textContent = msg; t.className = `toast show ${kind}`;
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.className = 'toast', 4000);
+}
+
+async function gh(path, opts = {}) {
+  const r = await fetch(API + path, {
+    ...opts,
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', ...(opts.headers || {}) },
+  });
+  if (!r.ok) { const e = new Error(`GitHub ${r.status}`); e.status = r.status; e.body = await r.text(); throw e; }
+  return r.json();
+}
+const b64decode = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\n/g, '')), c => c.charCodeAt(0)));
+const b64encode = s => { const b = new TextEncoder().encode(s); let x = ''; b.forEach(c => x += String.fromCharCode(c)); return btoa(x); };
+async function readFile(path) {
+  const f = await gh(`/contents/${path}?ref=${BRANCH}`);
+  return { sha: f.sha, text: b64decode(f.content) };
+}
+
+const DEFAULT_CFG = () => ({ maintenance: false, maintenanceMessage: '', minVersionCode: 0, latestVersionCode: 0, updateUrl: '', message: { id: '', text: '', url: '' }, disabledFeatures: [] });
+
+async function login() {
+  $('login-err').textContent = '';
+  const v = $('token').value.trim();
+  if (!v) return;
+  token = v;
+  try {
+    const repo = await gh('');
+    if (!repo.permissions?.push) throw Object.assign(new Error('no push'), { status: 403 });
+    try { localStorage.setItem('gh_token', token); } catch {}
+    start();
+  } catch (e) {
+    token = '';
+    $('login-err').textContent = e.status === 401 ? '❌ المفتاح غير صحيح أو منتهي.' :
+      e.status === 403 || e.status === 404 ? '❌ المفتاح ما عنده صلاحية على مستودع apps. تأكد من الخطوات 4 و 5.' :
+      '❌ ما قدرت أتصل بـ GitHub. تأكد من الإنترنت وحاول مرة ثانية.';
+  }
+}
+
+async function start() {
+  $('login').hidden = true; $('loading').hidden = false; $('logout').hidden = false;
+  try {
+    const apps = JSON.parse((await readFile('site/apps.json')).text).apps;
+    $('apps').innerHTML = '';
+    for (const app of apps) {
+      let sha = null, cfg = DEFAULT_CFG();
+      try { const f = await readFile(`site/config/${app.slug}.json`); sha = f.sha; cfg = { ...cfg, ...JSON.parse(f.text) }; } catch (e) { if (e.status !== 404) throw e; }
+      cfg.message = { id: '', text: '', url: '', ...(cfg.message || {}) };
+      if (!cfg.updateUrl) cfg.updateUrl = `https://zaid5195.github.io/apps/${app.slug}/`;
+      state[app.slug] = { sha, app, cfg, original: JSON.stringify(cfg) };
+      render(app.slug);
+    }
+    $('loading').hidden = true;
+    checkLive();
+  } catch (e) {
+    $('loading').hidden = true;
+    if (e.status === 401) { logout(); $('login-err').textContent = '❌ انتهت صلاحية المفتاح — سو مفتاح جديد.'; }
+    else toast('❌ صار خطأ في التحميل، حدّث الصفحة.', 'bad');
+  }
+}
+
+function render(slug) {
+  const { app, cfg } = state[slug];
+  let el = document.getElementById(`app-${slug}`);
+  if (!el) { el = document.createElement('section'); el.className = 'card'; el.id = `app-${slug}`; $('apps').appendChild(el); }
+  const controls = app.controls || [];
+  const forced = cfg.minVersionCode > 0 && cfg.minVersionCode >= cfg.latestVersionCode;
+  el.innerHTML = `
+    <div class="app-head">
+      <div class="icon" style="background:${esc(app.color || '#2563eb')}">${esc(app.emoji || '📱')}</div>
+      <div style="flex:1">
+        <h2>${esc(app.name)}</h2>
+        <span class="status ${cfg.maintenance ? 'bad' : 'ok'}">${cfg.maintenance ? '🛠️ تحت الصيانة' : '🟢 شغّال'}</span>
+        <span class="status warn" id="live-${slug}" hidden></span>
+      </div>
+    </div>
+
+    <div class="row">
+      <span class="lbl">🛠️ وضع الصيانة<span class="hint">يوقف التطبيق عند كل الناس ويطلع لهم رسالة</span></span>
+      <label class="sw danger"><input type="checkbox" data-k="maintenance" ${cfg.maintenance ? 'checked' : ''}><span></span></label>
+    </div>
+    <div ${cfg.maintenance ? '' : 'hidden'}>
+      <textarea data-k="maintenanceMessage" placeholder="نشتغل على تحسين التطبيق، ويرجع قريب إن شاء الله 🛠️">${esc(cfg.maintenanceMessage)}</textarea>
+    </div>
+
+    ${controls.length ? `<div class="section"><h3>⚙️ المزايا</h3>
+      ${controls.map(c => `<div class="row"><span class="lbl">${esc(c.label)}</span>
+        <label class="sw"><input type="checkbox" data-feature="${esc(c.key)}" ${cfg.disabledFeatures.includes(c.key) ? '' : 'checked'}><span></span></label></div>`).join('')}
+      <p class="note">أخضر = شغّالة. طفّها إذا خربت ميزة وتبي توقفها بس بدون ما توقف التطبيق كله.</p></div>` : ''}
+
+    <div class="section">
+      <h3>📢 رسالة للمستخدمين</h3>
+      ${cfg.message.text ? `<div class="current-msg">${JSON.parse(state[slug].original).message?.id === cfg.message.id ? 'الرسالة الحالية' : '✉️ جاهزة للإرسال (اضغط حفظ)'}: «${esc(cfg.message.text)}» ${cfg.message.url ? '🔗' : ''}</div>` : '<p class="note">ما في رسالة حاليًا.</p>'}
+      <textarea id="msg-${slug}" placeholder="مثال: نزل فيديو جديد على تيك توك! 🎬"></textarea>
+      <input type="url" id="url-${slug}" placeholder="رابط (اختياري) https://...">
+      <div class="btns">
+        <button class="btn2" data-act="send">✉️ جهّز الرسالة</button>
+        ${cfg.message.text ? '<button class="btn2" data-act="clear">🗑️ احذف الرسالة</button>' : ''}
+      </div>
+      <p class="note">تطلع لكل مستخدم مرة وحدة لما يفتح التطبيق.</p>
+    </div>
+
+    <div class="section">
+      <h3>⬆️ التحديثات</h3>
+      <div class="row">
+        <span class="lbl">رقم آخر نسخة<span class="hint">النسخ الأقدم يطلع لها «نسخة جديدة متاحة»</span></span>
+        <input type="number" min="0" data-k="latestVersionCode" value="${cfg.latestVersionCode}">
+      </div>
+      <div class="row">
+        <span class="lbl">إجبار الكل على التحديث<span class="hint">النسخ الأقدم من آخر نسخة ما تشتغل لين يحدّثون</span></span>
+        <label class="sw danger"><input type="checkbox" data-act="force" ${forced ? 'checked' : ''}><span></span></label>
+      </div>
+      <p class="note">رقم آخر نسخة أحدّثه أنا مع كل إصدار. استخدم الإجبار بس إذا النسخة القديمة فيها مشكلة خطيرة.</p>
+    </div>`;
+
+  el.querySelectorAll('[data-k]').forEach(inp => inp.addEventListener(inp.type === 'checkbox' ? 'change' : 'input', () => {
+    const k = inp.dataset.k;
+    cfg[k] = inp.type === 'checkbox' ? inp.checked : inp.type === 'number' ? Math.max(0, parseInt(inp.value || '0', 10)) : inp.value;
+    if (k === 'maintenance') render(slug);
+    if (k === 'latestVersionCode' && cfg.minVersionCode > 0) cfg.minVersionCode = cfg.latestVersionCode;
+    dirty();
+  }));
+  el.querySelectorAll('[data-feature]').forEach(inp => inp.addEventListener('change', () => {
+    const k = inp.dataset.feature, set = new Set(cfg.disabledFeatures);
+    inp.checked ? set.delete(k) : set.add(k);
+    cfg.disabledFeatures = [...set]; dirty();
+  }));
+  el.querySelector('[data-act=force]').addEventListener('change', e => {
+    cfg.minVersionCode = e.target.checked ? cfg.latestVersionCode : 0; dirty();
+  });
+  el.querySelector('[data-act=send]').addEventListener('click', () => {
+    const text = $(`msg-${slug}`).value.trim(), url = $(`url-${slug}`).value.trim();
+    if (!text) return toast('اكتب الرسالة أول ✍️', 'warn');
+    if (url && !/^https?:\/\//.test(url)) return toast('الرابط لازم يبدأ بـ https://', 'warn');
+    cfg.message = { id: 'msg-' + Date.now(), text, url };
+    render(slug); dirty(); toast('تمام — اضغط «حفظ ونشر» تحت عشان ترسلها');
+  });
+  el.querySelector('[data-act=clear]')?.addEventListener('click', () => {
+    cfg.message = { id: '', text: '', url: '' }; render(slug); dirty();
+  });
+}
+
+function changed() { return Object.values(state).filter(s => JSON.stringify(s.cfg) !== s.original); }
+function dirty() { $('savebar').classList.toggle('show', changed().length > 0); }
+
+async function save() {
+  const list = changed(); if (!list.length) return;
+  $('save').disabled = true; $('save').textContent = '⏳ جاري الحفظ…';
+  try {
+    for (const s of list) {
+      const body = { message: `لوحة التحكم: تحديث إعدادات ${s.app.name}`, content: b64encode(JSON.stringify(s.cfg, null, 2) + '\n'), branch: BRANCH };
+      if (s.sha) body.sha = s.sha;
+      const r = await gh(`/contents/site/config/${s.app.slug}.json`, { method: 'PUT', body: JSON.stringify(body) });
+      s.sha = r.content.sha; s.original = JSON.stringify(s.cfg);
+      render(s.app.slug);
+    }
+    dirty();
+    toast('✅ انحفظ! يوصل للتطبيقات خلال 5–10 دقائق');
+    checkLive(true);
+  } catch (e) {
+    toast(e.status === 409 ? '⚠️ الإعدادات تغيّرت من مكان ثاني — حدّث الصفحة وحاول مرة ثانية' :
+      e.status === 401 ? '❌ انتهت صلاحية المفتاح — سجّل خروج وادخل بمفتاح جديد' : '❌ ما انحفظ، حاول مرة ثانية', 'bad');
+  } finally {
+    $('save').disabled = false; $('save').textContent = '💾 حفظ ونشر التغييرات';
+  }
+}
+
+// Shows whether what the apps currently read (the live site) matches what is saved.
+async function checkLive(poll = false) {
+  for (let i = 0; i < (poll ? 40 : 1); i++) {
+    let pending = 0;
+    for (const s of Object.values(state)) {
+      const badge = $(`live-${s.app.slug}`); if (!badge) continue;
+      try {
+        const live = await (await fetch(`${LIVE}${s.app.slug}.json?t=${Date.now()}`, { cache: 'no-store' })).json();
+        const same = JSON.stringify({ ...DEFAULT_CFG(), ...live, message: { id: '', text: '', url: '', ...(live.message || {}) } }) === s.original;
+        badge.hidden = same; badge.textContent = '⏳ التغيير في الطريق للتطبيقات…';
+        if (!same) pending++;
+      } catch { badge.hidden = true; }
+    }
+    if (!pending) { if (poll) toast('✅ وصل التغيير للتطبيقات'); return; }
+    await new Promise(r => setTimeout(r, 15000));
+  }
+}
+
+function logout() {
+  try { localStorage.removeItem('gh_token'); } catch {}
+  token = ''; $('apps').innerHTML = ''; $('login').hidden = false; $('logout').hidden = true; $('savebar').classList.remove('show');
+}
+
+$('login-btn').addEventListener('click', login);
+$('token').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+$('save').addEventListener('click', save);
+$('logout').addEventListener('click', logout);
+window.addEventListener('beforeunload', e => { if (changed().length) e.preventDefault(); });
+token ? start() : ($('login').hidden = false);
+</script>
+</body>
+</html>
