@@ -1,11 +1,11 @@
 {
-  "time": "2026-11-05T23:28:47Z",
+  "time": "2026-11-06T13:26:30Z",
   "apps": [
     {
-      "slug": "floating-translator",
-      "versionName": "1.6",
-      "versionCode": 7,
-      "download": "https://github.com/zaid5195/apps/releases/download/floating-translator-v7/floating-translator.apk"
+      "slug": "player-card-maker",
+      "versionName": "1.0",
+      "versionCode": 1,
+      "download": "https://github.com/zaid5195/apps/releases/download/player-card-maker-v1/player-card-maker.apk"
     }
   ]
 }
