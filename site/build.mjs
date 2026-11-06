@@ -60,7 +60,10 @@ ${body}
 `;
 };
 
-const icon = a => `<div class="icon" style="--c:${esc(a.color || '#2563eb')}">${esc(a.emoji || '📱')}</div>`;
+// An app icon image (site/icons/…) when there is one, otherwise the emoji on a colored tile.
+const icon = (a, depth = 0) => a.icon
+  ? `<img class="icon img" src="${'../'.repeat(depth)}${esc(a.icon)}" alt="">`
+  : `<div class="icon" style="--c:${esc(a.color || '#2563eb')}">${esc(a.emoji || '📱')}</div>`;
 
 const card = a => `
   <a class="card" href="${esc(a.slug)}/">
@@ -114,7 +117,7 @@ const appPage = a => page({
   depth: 1,
   body: `
 <section class="app-hero">
-  ${icon(a)}
+  ${icon(a, 1)}
   <h1>${esc(a.name)}</h1>
   <p class="lead">${esc(a.tagline)}</p>
   <div class="meta center">
@@ -192,6 +195,8 @@ for (const a of apps) {
 }
 mkdirSync(join(out, 'privacy'), { recursive: true });
 writeFileSync(join(out, 'privacy', 'index.html'), privacyPage);
+const iconsDir = join(root, 'icons');
+if (existsSync(iconsDir)) cpSync(iconsDir, join(out, 'icons'), { recursive: true });
 const adminDir = join(root, 'admin');
 if (existsSync(adminDir)) cpSync(adminDir, join(out, 'admin'), { recursive: true });
 const cfgDir = join(root, 'config');
