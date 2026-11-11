@@ -9,5 +9,16 @@
     "url": ""
   },
   "disabledFeatures": [],
-  "latestVersionCode": 1
+  "latestVersionCode": 1,
+  "giftCodes": [
+    {
+      "code": "URYON29",
+      "food": 1000,
+      "wood": 1000,
+      "coal": 200,
+      "iron": 0,
+      "gems": 30,
+      "until": ""
+    }
+  ]
 }

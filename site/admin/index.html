@@ -374,6 +374,19 @@ function renderApp(app) {
           <label class="sw"><input type="checkbox" data-feature="${esc(c.key)}" ${cfg.disabledFeatures.includes(c.key) ? '' : 'checked'}><span></span></label></div>`).join('')}
         <p class="note">أخضر = شغّالة. طفّها إذا خربت ميزة وتبي توقفها بس.</p></div>` : ''}
 
+      ${(app.controls || []).some(c => c.key === 'gift_codes') ? `<div class="section"><h3>🎟️ رموز الهدايا</h3>
+        ${(cfg.giftCodes || []).length ? `<table>${cfg.giftCodes.map((g, i) => `<tr><td><b dir="ltr">${esc(g.code)}</b><span class="hint">${[['🍖', g.food], ['🌲', g.wood], ['⚫', g.coal], ['⚙️', g.iron], ['💎', g.gems]].filter(([, n]) => n > 0).map(([e, n]) => e + ' ' + fmt(n)).join('  ')}${g.until ? ` · لين ${esc(g.until)}` : ''}${g.until && g.until < new Date().toISOString().slice(0, 10) ? ' ⌛ منتهي' : ''}</span></td>
+          <td class="n"><button class="btn2" data-delcode="${i}">🗑️</button></td></tr>`).join('')}</table>` : '<p class="note">ما فيه رموز حاليًا.</p>'}
+        <label class="f">الرمز (حروف إنجليزية وأرقام)</label><input type="text" data-gc="code" dir="ltr" placeholder="FROST2026" maxlength="24">
+        <div class="row"><span class="lbl">🍖 أكل</span><input type="number" min="0" data-gc="food" value="0"></div>
+        <div class="row"><span class="lbl">🌲 حطب</span><input type="number" min="0" data-gc="wood" value="0"></div>
+        <div class="row"><span class="lbl">⚫ فحم</span><input type="number" min="0" data-gc="coal" value="0"></div>
+        <div class="row"><span class="lbl">⚙️ حديد</span><input type="number" min="0" data-gc="iron" value="0"></div>
+        <div class="row"><span class="lbl">💎 بلورات</span><input type="number" min="0" data-gc="gems" value="0"></div>
+        <div class="row"><span class="lbl">📅 آخر يوم يشتغل<span class="hint">فاضي = بدون نهاية</span></span><input type="date" data-gc="until" dir="ltr"></div>
+        <div class="btns"><button class="btn2" data-act="addcode">➕ أضف الرمز</button></div>
+        <p class="note">كل لاعب يستخدم الرمز مرة وحدة. بعد «حفظ ونشر» يشتغل خلال ثواني.</p></div>` : ''}
+
       <div class="section">
         <h3>📢 رسالة للمستخدمين</h3>
         ${cfg.message.text ? `<div class="current-msg">${msgSaved ? 'الرسالة الحالية' : '✉️ جاهزة للإرسال (اضغط حفظ)'}: «${esc(cfg.message.text)}» ${cfg.message.url ? '🔗' : ''}</div>` : '<p class="note">ما في رسالة حاليًا.</p>'}
@@ -416,10 +429,23 @@ function renderApp(app) {
     if (k === 'maintenance') return renderAll();
     dirty();
   }));
-  el.querySelectorAll('input[type=number]').forEach(inp => inp.addEventListener('blur', () => { if (inp.value.trim() === '') inp.value = cfg[inp.dataset.k]; }));
+  el.querySelectorAll('input[type=number][data-k]').forEach(inp => inp.addEventListener('blur', () => { if (inp.value.trim() === '') inp.value = cfg[inp.dataset.k]; }));
   el.querySelectorAll('[data-feature]').forEach(inp => inp.addEventListener('change', () => {
     const set = new Set(cfg.disabledFeatures); inp.checked ? set.delete(inp.dataset.feature) : set.add(inp.dataset.feature);
     cfg.disabledFeatures = [...set]; renderAll();
+  }));
+  el.querySelector('[data-act=addcode]')?.addEventListener('click', () => {
+    const val = k => el.querySelector(`[data-gc=${k}]`).value.trim();
+    const code = val('code').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!code) return toast('اكتب الرمز أول (حروف إنجليزية وأرقام)', 'warn');
+    if ((cfg.giftCodes || []).some(g => g.code === code)) return toast('هذا الرمز موجود', 'warn');
+    const n = k => Math.max(0, parseInt(val(k), 10) || 0);
+    const g = { code, food: n('food'), wood: n('wood'), coal: n('coal'), iron: n('iron'), gems: n('gems'), until: val('until') };
+    if (!g.food && !g.wood && !g.coal && !g.iron && !g.gems) return toast('حط هدية واحدة على الأقل', 'warn');
+    cfg.giftCodes = [...(cfg.giftCodes || []), g]; renderAll(); toast('تمام — اضغط «حفظ ونشر» تحت');
+  });
+  el.querySelectorAll('[data-delcode]').forEach(b => b.addEventListener('click', () => {
+    cfg.giftCodes = cfg.giftCodes.filter((_, i) => i !== +b.dataset.delcode); renderAll();
   }));
   el.querySelector('[data-act=force]')?.addEventListener('change', e => { cfg.minVersionCode = e.target.checked ? cfg.latestVersionCode : 0; dirty(); });
   el.querySelector('[data-act=send]')?.addEventListener('click', () => {
