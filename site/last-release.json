@@ -1,11 +1,17 @@
 {
-  "time": "2026-11-06T15:59:12Z",
+  "time": "2026-11-11T00:17:58Z",
   "apps": [
     {
       "slug": "floating-translator",
       "versionName": "1.7",
       "versionCode": 8,
       "download": "https://github.com/zaid5195/apps/releases/download/floating-translator-v8/floating-translator.apk"
+    },
+    {
+      "slug": "frost-city",
+      "versionName": "1.0",
+      "versionCode": 1,
+      "download": "https://github.com/zaid5195/apps/releases/download/frost-city-v1/frost-city.apk"
     },
     {
       "slug": "player-card-maker",
