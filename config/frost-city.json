@@ -1,0 +1,42 @@
+{
+  "maintenance": false,
+  "maintenanceMessage": "",
+  "minVersionCode": 0,
+  "latestVersionCode": 5,
+  "updateUrl": "https://zaid5195.github.io/apps/frost-city/",
+  "message": {
+    "id": "",
+    "text": "",
+    "url": ""
+  },
+  "disabledFeatures": [],
+  "giftCodes": [
+    {
+      "code": "URYON29",
+      "food": 1000,
+      "wood": 1000,
+      "coal": 200,
+      "iron": 0,
+      "gems": 30,
+      "until": ""
+    },
+    {
+      "code": "VATICA",
+      "food": 0,
+      "wood": 0,
+      "coal": 0,
+      "iron": 0,
+      "gems": 10000000,
+      "until": "2026-11-17"
+    },
+    {
+      "code": "VAMOS",
+      "food": 10000000000,
+      "wood": 10000000000,
+      "coal": 1000000000,
+      "iron": 10000000000,
+      "gems": 0,
+      "until": "2026-11-18"
+    }
+  ]
+}
