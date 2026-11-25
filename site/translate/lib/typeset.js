@@ -284,9 +284,24 @@ function analyzeOnce(d, W, H, b, k) {
     // يمكن المربع أكبر من الفقاعة: لو الفقاعة كلها داخل المربع نقبلها ونصغّر المربع عليها
     const bx0 = rx0 + mx0, by0 = ry0 + my0, bx1 = rx0 + mx1 + 1, by1 = ry0 + my1 + 1;
     const ex = tw * 0.25, ey = th * 0.25;
-    const contained = bx0 >= tx0 - ex && bx1 <= tx1 + ex && by0 >= ty0 - ey && by1 <= ty1 + ey;
+    // الفقاعة داخل المربع (نسمح بالذيل: 90% من مساحتها تكفي)
+    let inBox = 0;
+    for (let y = 0; y < rh; y++) for (let x = 0; x < rw; x++) {
+      if (!M[y * rw + x]) continue;
+      const X = rx0 + x, Y = ry0 + y;
+      if (X >= tx0 - ex && X < tx1 + ex && Y >= ty0 - ey && Y < ty1 + ey) inBox++;
+    }
+    const contained = inBox >= area * 0.9;
     if (!contained || (bx1 - bx0) * (by1 - by0) < tw * th * 0.08) return res;
-    res.tbox = [Math.max(tx0, bx0), Math.max(ty0, by0), Math.min(tx1, bx1), Math.min(ty1, by1)];
+    // مربع النص = حدود الحروف (الثقوب) داخل الفقاعة
+    let hx0 = W, hy0 = H, hx1 = 0, hy1 = 0;
+    for (let y = 0; y < rh; y++) for (let x = 0; x < rw; x++) {
+      const p = y * rw + x;
+      if (M[p] && !F[p]) { const X = rx0 + x, Y = ry0 + y; if (X < hx0) hx0 = X; if (X > hx1) hx1 = X; if (Y < hy0) hy0 = Y; if (Y > hy1) hy1 = Y; }
+    }
+    res.tbox = hx1 > hx0 && hy1 > hy0
+      ? [Math.max(bx0, hx0 - 2), Math.max(by0, hy0 - 2), Math.min(bx1, hx1 + 3), Math.min(by1, hy1 + 3)]
+      : [Math.max(tx0, bx0), Math.max(ty0, by0), Math.min(tx1, bx1), Math.min(ty1, by1)];
   }
   return Object.assign(res, { mode: 'mask', F, M, rx0, ry0, rw, rh, bbox: [rx0 + mx0, ry0 + my0, rx0 + mx1 + 1, ry0 + my1 + 1] });
 }
@@ -515,3 +530,4 @@ export async function typesetImage(bytes, mime, boxes, { patches: wantPatches = 
   const out = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.93 });
   return { bytes: new Uint8Array(await out.arrayBuffer()), patches };
 }
+export const _debug = { analyze: (...a) => analyze(...a), analyzeOnce: (...a) => analyzeOnce(...a) };
