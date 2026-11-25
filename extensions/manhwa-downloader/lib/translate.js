@@ -23,7 +23,7 @@ async function apiFetch(path, key, body) {
     if (res.status === 429 || res.status >= 500) {
       const retry = data?.error?.details?.find((d) => d.retryDelay)?.retryDelay;
       const err = new Error(msg);
-      err.retryMs = retry ? parseFloat(retry) * 1000 + 500 : 15000;
+      err.retryMs = retry ? parseFloat(retry) * 1000 + 500 : (res.status === 429 ? 15000 : 5000);
       throw err;
     }
     if (res.status === 400 && /api key/i.test(msg)) throw new FatalError('مفتاح Gemini غير صحيح');
@@ -33,16 +33,18 @@ async function apiFetch(path, key, body) {
   return data;
 }
 
-// نختار أحدث موديل «flash» متاح للمفتاح
-export async function pickModel(key) {
+// قائمة موديلات بالترتيب: الأحدث المستقر أولاً، بعده التجريبي، وآخر شي «lite»
+export async function pickModels(key) {
   const data = await apiFetch('models?pageSize=200', key);
-  const ok = (data.models || []).filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'))
+  const names = (data.models || []).filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'))
     .map((m) => m.name.replace(/^models\//, ''))
-    .filter((n) => /^gemini-[\d.]+-flash/.test(n) && !/lite|image|tts|live|audio|thinking|8b|embedding|exp/.test(n));
+    .filter((n) => /^gemini-[\d.]+-flash/.test(n) && !/image|tts|live|audio|thinking|8b|embedding|exp/.test(n));
   const ver = (n) => parseFloat(n.match(/^gemini-([\d.]+)/)[1]);
-  const score = (n) => ver(n) * 10 - (/preview/.test(n) ? 5 : 0) - (/\d{2,}$|-\d{3}$/.test(n) ? 1 : 0);
-  ok.sort((a, b) => score(b) - score(a));
-  return ok[0] || 'gemini-2.5-flash';
+  const score = (n) => ver(n) * 10 - (/preview/.test(n) ? 12 : 0) - (/lite/.test(n) ? 20 : 0) - (/-\d{3}$|\d{2}-\d{2}/.test(n) ? 1 : 0);
+  names.sort((a, b) => score(b) - score(a));
+  const list = [...new Set(names)];
+  for (const f of ['gemini-2.5-flash', 'gemini-2.5-flash-lite']) if (!list.includes(f)) list.push(f);
+  return list.slice(0, 6);
 }
 
 const SCHEMA = {
@@ -93,7 +95,42 @@ function chunks(w, h) {
   return out;
 }
 
-export async function translateImage(bytes, mime, { key, model, lang, context, signal }) {
+// models = { list: [...], i: 0 } مشتركة بين كل الصور: لو موديل مزحوم ننتقل للي بعده للكل
+async function generate(body, key, models, signal) {
+  let net = 0, busy = 0;
+  for (let attempt = 0; attempt < 12; attempt++) {
+    if (signal?.aborted) throw new FatalError('توقفت الترجمة');
+    const model = models.list[models.i];
+    try {
+      return await apiFetch(`models/${model}:generateContent`, key, body);
+    } catch (e) {
+      if (e instanceof FatalError) throw e;
+      const wait = (ms, why) => { signal?.onWait?.(Math.round(ms / 1000), why); return new Promise((r) => setTimeout(r, ms)); };
+      if (e instanceof TypeError) { // انقطاع اتصال
+        if (++net > 4) throw new Error('الاتصال بـ Gemini ينقطع — تأكد من الإنترنت');
+        await wait(2000 * net, 'اتصال');
+        continue;
+      }
+      if (!e.retryMs) {
+        // موديل غير متاح لهذا المفتاح: نجرب اللي بعده
+        if (/not found|not supported|unavailable/i.test(e.message) && models.i < models.list.length - 1) { models.i++; signal?.onModel?.(models.list[models.i]); continue; }
+        throw e;
+      }
+      // مزحوم أو خلصت الحصة: ننتقل لموديل ثاني، ولو خلصت الموديلات ننتظر
+      busy++;
+      if (models.i < models.list.length - 1 && (busy >= 2 || e.retryMs > 20000)) {
+        models.i++; busy = 0;
+        signal?.onModel?.(models.list[models.i]);
+        continue;
+      }
+      if (models.i >= models.list.length - 1 && busy >= 2) { models.i = 0; signal?.onModel?.(models.list[0]); }
+      await wait(Math.min(e.retryMs, 60000), 'ضغط');
+    }
+  }
+  throw new Error('Gemini مشغول جداً الحين — جرّب بعد شوي');
+}
+
+export async function translateImage(bytes, mime, { key, models, lang, context, signal }) {
   const bmp = await createImageBitmap(new Blob([bytes], { type: mime }));
   const W = bmp.width, H = bmp.height;
   const scale = Math.min(1, 1600 / W);
@@ -108,16 +145,7 @@ export async function translateImage(bytes, mime, { key, model, lang, context, s
         contents: [{ parts: [{ inline_data: { mime_type: 'image/jpeg', data } }, { text: prompt(lang, context) }] }],
         generationConfig: { temperature: 0.3, responseMimeType: 'application/json', responseSchema: SCHEMA },
       };
-      let res;
-      for (let attempt = 0; ; attempt++) {
-        if (signal?.aborted) throw new FatalError('توقفت الترجمة');
-        try { res = await apiFetch(`models/${model}:generateContent`, key, body); break; }
-        catch (e) {
-          if (e instanceof FatalError || !e.retryMs || attempt >= 4) throw e;
-          signal?.onWait?.(Math.round(e.retryMs / 1000));
-          await new Promise((r) => setTimeout(r, e.retryMs));
-        }
-      }
+      const res = await generate(body, key, models, signal);
       const cand = res.candidates?.[0];
       const txt = (cand?.content?.parts || []).map((p) => p.text || '').join('');
       let list = [];

@@ -1,6 +1,6 @@
 import { makeZip } from './lib/zip.js';
 import { makePdf } from './lib/pdf.js';
-import { LANGS, FatalError, pickModel, translateImage } from './lib/translate.js';
+import { LANGS, FatalError, pickModels, translateImage } from './lib/translate.js';
 import { typesetImage } from './lib/typeset.js';
 
 // الفكرة: ما نطلب أي شي من الموقع. نأخذ الصور اللي المتصفح عرضها:
@@ -28,14 +28,17 @@ function scanPage(LAZY, PH) {
     // الصور اللي في نفس الحاوية وبنفس الكلاس = صفحات الفصل
     return `${p?.tagName}.${cls(p)}|${p?.parentElement?.tagName}.${cls(p?.parentElement)}`;
   };
+  // الحدود نسبةً لعرض الصفحة (في الجوال الصفحة ضيقة لما تكون اللوحة مفتوحة)
+  const vw = innerWidth || document.documentElement.clientWidth || 400;
+  const minW = Math.min(120, vw * 0.4);
   document.querySelectorAll('img, canvas').forEach((el, idx) => {
     const r = el.getBoundingClientRect();
     const cs = getComputedStyle(el);
     if (cs.display === 'none' || cs.visibility === 'hidden') return;
     el.setAttribute('data-mhd-idx', idx);
     if (el.tagName === 'CANVAS') {
-      if (el.width < 200 || el.height < 200 || r.width < 120) return;
-      items.push({ idx, tag: 'canvas', w: el.width, h: el.height, rw: Math.round(r.width), loaded: true, key: groupKey(el) });
+      if (el.width < 200 || el.height < 200 || r.width < minW) return;
+      items.push({ idx, tag: 'canvas', w: el.width, h: el.height, rw: Math.round(r.width), vw, loaded: true, key: groupKey(el) });
       return;
     }
     const lazy = LAZY.map((a) => el.getAttribute(a)).find((v) => v && v.trim() && !v.startsWith('data:'));
@@ -47,12 +50,12 @@ function scanPage(LAZY, PH) {
     const loaded = el.complete && el.naturalWidth > 0 && !placeholder;
     if (/\.svg(\?|$)/i.test(cur)) return;
     if (loaded && (el.naturalWidth < 100 || el.naturalHeight < 100)) return;
-    if (!loaded && !lazy && r.width < 120) return;
+    if (!loaded && !lazy && r.width < minW) return;
     const url = loaded ? cur : (lazyAbs || cur);
     if (seen.has(url)) return;
     seen.add(url);
     items.push({
-      idx, tag: 'img', url, loaded, rw: Math.round(r.width), key: groupKey(el),
+      idx, tag: 'img', url, loaded, rw: Math.round(r.width), vw, key: groupKey(el),
       w: loaded ? el.naturalWidth : +el.getAttribute('width') || Math.round(r.width),
       h: loaded ? el.naturalHeight : +el.getAttribute('height') || Math.round(r.height),
     });
@@ -317,28 +320,34 @@ async function visibleShot(it) {
 // ---------- الفحص ----------
 
 function pickDefaults(items) {
-  // 1) أكبر مجموعة صور في نفس الحاوية وبنفس الكلاس = صفحات الفصل
+  // «عريضة» = نصف عرض الصفحة أو أكثر (مو رقم ثابت، عشان الجوال)
+  const wide = (i) => i.rw >= Math.min(150, (i.vw || 400) * 0.45);
+  const sameW = (a, w) => Math.abs(a - w) <= Math.max(w * 0.08, 6);
+  const modeW = (list) => {
+    const c = new Map();
+    list.forEach((i) => { const k = Math.round(i.rw / 5); c.set(k, (c.get(k) || 0) + 1); });
+    let w = 0, m = 0;
+    c.forEach((n, k) => { if (n > m) { m = n; w = k * 5; } });
+    return { w, m };
+  };
+  // 1) أكبر مجموعة صور عريضة في نفس الحاوية = صفحات الفصل
   const groups = new Map();
-  items.forEach((i) => { if (!i.loaded || i.rw >= 150) groups.set(i.key, [...(groups.get(i.key) || []), i]); });
+  items.forEach((i) => { if (wide(i) || !i.loaded) groups.set(i.key, [...(groups.get(i.key) || []), i]); });
   let best = null;
   groups.forEach((g) => { if (!best || g.length > best.length) best = g; });
+  state.groupInfo = [...groups.entries()].sort((a, b) => b[1].length - a[1].length).slice(0, 4)
+    .map(([k, g]) => `${g.length}× ${k.slice(0, 70)} rw=${g.slice(0, 3).map((i) => i.rw).join(',')}`);
   if (best && best.length >= 3) {
-    // داخل الحاوية نفسها: نستبعد اللي عرضها مختلف (إعلان بين الصفحات مثلاً)
-    const c = new Map();
-    best.filter((i) => i.rw >= 150).forEach((i) => { const k = Math.round(i.rw / 10); c.set(k, (c.get(k) || 0) + 1); });
-    let w = 0, m = 0;
-    c.forEach((n, k) => { if (n > m) { m = n; w = k * 10; } });
+    const { w } = modeW(best.filter(wide));
     const set = new Set(best);
-    items.forEach((i) => (i.on = set.has(i) && (!w || i.rw < 150 && !i.loaded || Math.abs(i.rw - w) <= Math.max(w * 0.08, 12))));
+    // داخل الحاوية: نستبعد اللي عرضه مختلف (إعلان بين الصفحات)
+    items.forEach((i) => (i.on = set.has(i) && (!w || !wide(i) || sameW(i.rw, w))));
     return;
   }
-  // 2) وإلا: الصور اللي بنفس العرض
-  const counts = new Map();
-  items.filter((i) => i.rw >= 200).forEach((i) => { const k = Math.round(i.rw / 10); counts.set(k, (counts.get(k) || 0) + 1); });
-  let main = 0, max = 0;
-  counts.forEach((c, k) => { if (c > max) { max = c; main = k * 10; } });
+  // 2) وإلا: الصور العريضة اللي بنفس العرض
+  const { w, m } = modeW(items.filter(wide));
   items.forEach((i) => {
-    if (max >= 2) i.on = Math.abs(i.rw - main) <= Math.max(main * 0.08, 12);
+    if (m >= 2) i.on = wide(i) && sameW(i.rw, w);
     else i.on = i.w >= 300 && i.h >= 300;
   });
   if (!items.some((i) => i.on)) items.forEach((i) => (i.on = true));
@@ -371,7 +380,9 @@ async function scan(withScroll = false) {
     }
     $('pageTitle').textContent = main?.title || tab.title || '';
     $('nameInput').value = cleanName(main?.title || tab.title);
-    $('logBox').hidden = true;
+    $('log').textContent = `page width: ${items[0]?.vw}px\ngroups:\n  ` + (state.groupInfo || []).join('\n  ');
+    $('logBox').hidden = false;
+    $('logBox').open = false;
     render();
     const on = items.filter((i) => i.on).length;
     status(items.length
@@ -530,16 +541,17 @@ async function captureMissing(items, log, used, onEach) {
 
 // ---------- الترجمة ----------
 
-let model = null;
+let models = null; // { list, i }
 const trCtx = [];
 
-async function getModel(key) {
-  if (model) return model;
-  const { gemModel, gemModelKey } = await chrome.storage.local.get(['gemModel', 'gemModelKey']);
-  if (gemModel && gemModelKey === key.slice(-6)) return (model = gemModel);
-  try { model = await pickModel(key); } catch (e) { if (e instanceof FatalError) throw e; model = 'gemini-2.5-flash'; }
-  chrome.storage.local.set({ gemModel: model, gemModelKey: key.slice(-6) });
-  return model;
+async function getModels(key) {
+  if (models) return models;
+  const { gemModels, gemModelKey, gemModelAt } = await chrome.storage.local.get(['gemModels', 'gemModelKey', 'gemModelAt']);
+  if (gemModels?.length && gemModelKey === key.slice(-6) && Date.now() - (gemModelAt || 0) < 86400000) return (models = { list: gemModels, i: 0 });
+  let list;
+  try { list = await pickModels(key); } catch (e) { if (e instanceof FatalError) throw e; list = ['gemini-2.5-flash', 'gemini-2.5-flash-lite']; }
+  chrome.storage.local.set({ gemModels: list, gemModelKey: key.slice(-6), gemModelAt: Date.now() });
+  return (models = { list, i: 0 });
 }
 
 async function ensureTypeset(it) {
@@ -571,11 +583,15 @@ function makeTranslator(key, lang, stats) {
     while (active < 2 && queue.length && !fatal && !state.stop?.aborted) {
       const it = queue.shift();
       active++;
-      const signal = { get aborted() { return state.stop?.aborted; }, onWait: (s) => { waiting = ` (Gemini طلب انتظار ${s} ثانية)`; } };
+      const signal = {
+        get aborted() { return state.stop?.aborted; },
+        onWait: (s, why) => { waiting = why === 'اتصال' ? ` (انقطع الاتصال، نعيد بعد ${s} ث)` : ` (Gemini مزحوم، ننتظر ${s} ث)`; stats.update?.(waiting); },
+        onModel: (m) => { $('modelName').textContent = m; waiting = ` (انتقلنا لموديل ${m})`; stats.update?.(waiting); },
+      };
       const p = (async () => {
-        const m = await getModel(key);
-        $('modelName').textContent = m;
-        it.tr = await translateImage(it.bytes, it.mime, { key, model: m, lang, context: trCtx.slice(-12), signal });
+        const ms = await getModels(key);
+        $('modelName').textContent = ms.list[ms.i];
+        it.tr = await translateImage(it.bytes, it.mime, { key, models: ms, lang, context: trCtx.slice(-12), signal });
         waiting = '';
         it.tr.forEach((b) => trCtx.push(`${b.text} → ${b.tr}`));
         const c = state.cache.get(cacheKey(it));
@@ -630,9 +646,14 @@ async function translateChapter({ andThen } = {}) {
     await tr.finish();
     if (stats.errs.length) log.push('translate errors:\n   ' + [...new Set(stats.errs)].slice(0, 3).join('\n   '));
     const failedCap = items.filter((i) => i.failed).length;
+    const already = items.filter((i) => i.tr).length - stats.ok;
+    if (!stats.ok && !already) {
+      status('ما قدرت أترجم أي صورة 😕' + (stats.errs[0] ? `\nالسبب: ${stats.errs[0]}` : '') + '\nجرّب «ترجم الفصل» مرة ثانية بعد شوي', 'err');
+      return null;
+    }
     if (!andThen) {
-      status(`تمت الترجمة ✅ ${stats.ok} صورة، ${stats.bubbles} فقاعة` +
-        (stats.fail || failedCap ? `\nفشلت ${stats.fail + failedCap} صورة — اضغط «ترجم الفصل» مرة ثانية يكمل الناقص` : ''), stats.fail || failedCap ? 'err' : 'ok');
+      status(`تمت الترجمة ✅ ${stats.ok + already} صورة، ${stats.bubbles} فقاعة جديدة` +
+        (stats.fail || failedCap ? `\nفشلت ${stats.fail + failedCap} صورة — اضغط «ترجم الفصل» مرة ثانية يكمل الناقص بس` : ''), stats.fail || failedCap ? 'err' : 'ok');
     }
     return true;
   } catch (e) {
@@ -717,7 +738,7 @@ chrome.storage.local.get({ fmt: 'zip', saveAs: false, shotOnly: false, trDl: fal
   $('keyInput').value = o.gemKey;
   $('langSel').value = o.lang;
 });
-$('keyInput').addEventListener('change', () => { model = null; chrome.storage.local.set({ gemKey: $('keyInput').value.trim() }); });
+$('keyInput').addEventListener('change', () => { models = null; chrome.storage.local.set({ gemKey: $('keyInput').value.trim() }); });
 $('langSel').addEventListener('change', () => chrome.storage.local.set({ lang: $('langSel').value }));
 $('trDl').addEventListener('change', () => chrome.storage.local.set({ trDl: $('trDl').checked }));
 $('trBtn').onclick = () => translateChapter();
