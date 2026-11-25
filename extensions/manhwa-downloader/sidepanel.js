@@ -1,6 +1,7 @@
 import { makeZip } from './lib/zip.js';
 import { makePdf } from './lib/pdf.js';
-import { LANGS, FatalError, pickModel, translateImage, renderTranslated } from './lib/translate.js';
+import { LANGS, FatalError, pickModel, translateImage } from './lib/translate.js';
+import { typesetImage } from './lib/typeset.js';
 
 // الفكرة: ما نطلب أي شي من الموقع. نأخذ الصور اللي المتصفح عرضها:
 // 1) الملف الأصلي من ذاكرة المتصفح (CDP: Page.getResourceContent)
@@ -366,7 +367,7 @@ async function scan(withScroll = false) {
     state.items = items;
     for (const it of items) {
       const c = state.cache.get(cacheKey(it));
-      if (c) Object.assign(it, { bytes: c.bytes, mime: c.mime, tr: c.tr, thumb: URL.createObjectURL(new Blob([c.bytes], { type: c.mime })) });
+      if (c) Object.assign(it, { bytes: c.bytes, mime: c.mime, tr: c.tr, ts: c.ts, thumb: URL.createObjectURL(new Blob([c.bytes], { type: c.mime })) });
     }
     $('pageTitle').textContent = main?.title || tab.title || '';
     $('nameInput').value = cleanName(main?.title || tab.title);
@@ -541,12 +542,21 @@ async function getModel(key) {
   return model;
 }
 
+async function ensureTypeset(it) {
+  if (it.ts || !it.tr) return it.ts;
+  it.ts = it.tr.length ? await typesetImage(it.bytes, it.mime, it.tr, state.trLang || $('langSel').value) : { bytes: null, patches: [] };
+  const c = state.cache.get(cacheKey(it));
+  if (c) c.ts = it.ts;
+  return it.ts;
+}
+
 async function showOverlay(it) {
   if (!it.tr?.length) return;
+  await ensureTypeset(it);
   const target = { tabId: state.tabId, frameIds: [it.frameId] };
   await chrome.scripting.executeScript({ target, files: ['overlay.js'] });
   await chrome.scripting.executeScript({
-    target, func: (idx, boxes, rtl) => window.__mhdOverlay.add(idx, boxes, rtl), args: [it.idx, it.tr, LANGS[$('langSel').value]?.rtl ?? true],
+    target, func: (idx, patches) => window.__mhdOverlay.add(idx, patches), args: [it.idx, it.ts.patches],
   });
   $('ovBtn').disabled = false;
   $('ovBtn').textContent = '👁️ إخفاء الترجمة';
@@ -602,7 +612,7 @@ async function translateChapter({ andThen } = {}) {
   if (!key) { status('حط مفتاح Gemini أولاً (فوق في قسم الترجمة)', 'err'); $('keyInput').focus(); return null; }
   if (!items.length) return null;
   const lang = $('langSel').value;
-  if (state.trLang && state.trLang !== lang) { state.items.forEach((i) => (i.tr = null)); state.cache.forEach((c) => (c.tr = null)); trCtx.length = 0; }
+  if (state.trLang && state.trLang !== lang) { state.items.forEach((i) => (i.tr = i.ts = null)); state.cache.forEach((c) => (c.tr = c.ts = null)); trCtx.length = 0; }
   state.trLang = lang;
   setBusy(true);
   state.stop = { aborted: false };
@@ -663,9 +673,9 @@ async function download() {
       if (!it.bytes) { failed.push(i + 1); continue; }
       let data = it.bytes, mime = it.mime;
       if (withTr && it.tr?.length) {
-        status(`جاري رسم الترجمة على الصور… ${i + 1}/${chosen.length}`);
-        data = await renderTranslated(it.bytes, it.mime, it.tr, state.trLang);
-        mime = 'image/jpeg';
+        status(`جاري تجهيز الصور المترجمة… ${i + 1}/${chosen.length}`);
+        const ts = await ensureTypeset(it);
+        if (ts?.bytes) { data = ts.bytes; mime = 'image/jpeg'; }
       }
       const ext = sniffType(data)[1];
       files.push({ name: `${String(i + 1).padStart(pad, '0')}.${ext}`, data, mime });
