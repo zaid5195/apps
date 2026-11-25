@@ -23,7 +23,7 @@ function scanPage(LAZY, PH) {
     const p = el.parentElement;
     const cls = (e) => (e && typeof e.className === 'string' ? e.className.trim().split(/\s+/).sort().join('.') : '');
     // الصور اللي في نفس الحاوية وبنفس الكلاس = صفحات الفصل
-    return `${el.tagName}.${cls(el)}|${p?.tagName}.${cls(p)}|${p?.parentElement?.tagName}.${cls(p?.parentElement)}`;
+    return `${p?.tagName}.${cls(p)}|${p?.parentElement?.tagName}.${cls(p?.parentElement)}`;
   };
   document.querySelectorAll('img, canvas').forEach((el, idx) => {
     const r = el.getBoundingClientRect();
@@ -313,8 +313,13 @@ function pickDefaults(items) {
   let best = null;
   groups.forEach((g) => { if (!best || g.length > best.length) best = g; });
   if (best && best.length >= 3) {
+    // داخل الحاوية نفسها: نستبعد اللي عرضها مختلف (إعلان بين الصفحات مثلاً)
+    const c = new Map();
+    best.filter((i) => i.rw >= 150).forEach((i) => { const k = Math.round(i.rw / 10); c.set(k, (c.get(k) || 0) + 1); });
+    let w = 0, m = 0;
+    c.forEach((n, k) => { if (n > m) { m = n; w = k * 10; } });
     const set = new Set(best);
-    items.forEach((i) => (i.on = set.has(i)));
+    items.forEach((i) => (i.on = set.has(i) && (!w || i.rw < 150 && !i.loaded || Math.abs(i.rw - w) <= Math.max(w * 0.08, 12))));
     return;
   }
   // 2) وإلا: الصور اللي بنفس العرض
