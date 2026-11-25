@@ -22,25 +22,6 @@
   </section>
 
   <section class="card">
-    <div class="row between"><strong>🌐 ترجمة الفصل</strong><span id="modelName" class="muted small-text"></span></div>
-    <div id="keyRow">
-      <label class="field">مفتاح Gemini (مجاني)
-        <input id="keyInput" type="password" placeholder="الصق المفتاح هنا (يبدأ بـ AIza)" autocomplete="off">
-      </label>
-      <a class="small-text" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">← خذ مفتاح مجاني من Google AI Studio</a>
-    </div>
-    <label class="field">لغة الترجمة
-      <select id="langSel"></select>
-    </label>
-    <div class="row">
-      <button id="trBtn" class="primary" disabled>🌐 ترجم الفصل</button>
-      <button id="ovBtn" disabled>👁️ إخفاء الترجمة</button>
-      <button id="stopBtn" hidden>⏹️ إيقاف</button>
-    </div>
-    <div class="small-text muted">اضغط على أي فقاعة مترجمة في الصفحة عشان تشوف النص الأصلي.</div>
-  </section>
-
-  <section class="card">
     <label class="field">اسم الملف
       <input id="nameInput" type="text" placeholder="اسم الفصل">
     </label>
@@ -51,9 +32,9 @@
       <label><input type="radio" name="fmt" value="images"> صور منفصلة</label>
     </div>
     <label class="check"><input id="shotOnly" type="checkbox"> صوّر كل صورة من الشاشة دائماً (للمواقع اللي تخربط الصور)</label>
-    <label class="check"><input id="trDl" type="checkbox"> حمّل الصور مترجمة 🌐</label>
     <label class="check"><input id="saveAs" type="checkbox"> اسألني وين أحفظ</label>
     <button id="downloadBtn" class="primary big" disabled>⬇️ تحميل الفصل</button>
+    <button id="stopBtn" hidden>⏹️ إيقاف</button>
     <div id="progress" class="progress" hidden><div id="bar"></div></div>
     <div id="status" class="status"></div>
     <details id="logBox" class="log" hidden><summary>تفاصيل (صوّرها وأرسلها لو فيه مشكلة)</summary><pre id="log"></pre></details>
