@@ -39,3 +39,7 @@ input[type=text] { width: 100%; margin-top: 4px; padding: 7px 9px; border: 1px s
 .thumb .num { position: absolute; top: 3px; right: 3px; background: rgba(0,0,0,.65); color: #fff; font-size: 11px; padding: 0 5px; border-radius: 6px; }
 .thumb .dim { direction: ltr; position: absolute; bottom: 3px; left: 3px; right: 3px; background: rgba(0,0,0,.55); color: #fff; font-size: 10px; text-align: center; border-radius: 4px; }
 .empty { color: var(--muted); text-align: center; padding: 16px 0; grid-column: 1 / -1; }
+.hint { font-size: 12px; color: var(--muted); margin: -4px 0 10px; }
+.thumb .ph { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 22px; }
+.thumb.done::after { content: "✓"; position: absolute; top: 3px; left: 3px; background: var(--ok); color: #fff; font-size: 11px; width: 16px; height: 16px; border-radius: 50%; display: grid; place-items: center; }
+.thumb.fail { border-color: var(--err); }

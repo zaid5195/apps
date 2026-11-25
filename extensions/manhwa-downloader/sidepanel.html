@@ -11,12 +11,13 @@
     <img src="icons/48.png" alt="" width="28" height="28">
     <h1>منزّل فصول المانهوا</h1>
   </header>
+  <p class="hint">الإضافة تاخذ الصور اللي المتصفح عرضها أصلاً — ما ترسل أي طلب جديد للموقع. بيطلع شريط أصفر «بدأ تصحيح الأخطاء» أثناء الالتقاط، هذا طبيعي.</p>
 
   <section class="card">
     <div id="pageTitle" class="page-title">افتح صفحة فصل ثم اضغط «فحص الصفحة»</div>
     <div class="row">
       <button id="scanBtn" class="primary">🔍 فحص الصفحة</button>
-      <button id="scrollBtn" title="ينزل لآخر الصفحة عشان تنحمّل كل الصور المؤجلة ثم يفحص">⬇️ تمرير + فحص</button>
+      <button id="scrollBtn" title="ينزل لآخر الصفحة عشان تبان كل الصور المؤجلة ثم يفحص">⬇️ تمرير + فحص</button>
     </div>
   </section>
 
@@ -30,6 +31,7 @@
       <label><input type="radio" name="fmt" value="pdf"> PDF</label>
       <label><input type="radio" name="fmt" value="images"> صور منفصلة</label>
     </div>
+    <label class="check"><input id="shotOnly" type="checkbox"> صوّر كل صورة من الشاشة دائماً (للمواقع اللي تخربط الصور)</label>
     <label class="check"><input id="saveAs" type="checkbox"> اسألني وين أحفظ</label>
     <button id="downloadBtn" class="primary big" disabled>⬇️ تحميل الفصل</button>
     <div id="progress" class="progress" hidden><div id="bar"></div></div>
