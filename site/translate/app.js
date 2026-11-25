@@ -7,7 +7,6 @@ import { dbGet, dbPut, dbDel, hashBytes } from './lib/db.js';
 
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const BATCH = 4; // كم جزء صورة في الطلب الواحد
 
 // ---------- التخزين ----------
 const raw = {
@@ -26,7 +25,8 @@ const FONTS = {
   lalezar: { label: 'Lalezar — كوميكس', family: 'Lalezar', weight: 400 },
   changa: { label: 'Changa — هندسي', family: 'Changa', weight: 600 },
 };
-const settings = Object.assign({ font: 'naskh', scale: 100, noPunct: true, autoNames: true, model: '' }, json.get('mt-settings', {}));
+const settings = Object.assign({ font: 'naskh', scale: 100, noPunct: true, autoNames: true, model: '', batch: 2 }, json.get('mt-settings', {}));
+const BATCH = () => settings.batch || 2; // كم صفحة في الطلب الواحد
 const saveSettings = () => json.set('mt-settings', settings);
 
 const state = { pages: [], name: 'chapter', busy: false, stop: null, ctx: [], halt: null };
@@ -70,6 +70,8 @@ function fillModels() {
 }
 fillModels();
 $('model').addEventListener('change', () => { settings.model = $('model').value; saveSettings(); });
+$('batch').value = String(settings.batch);
+$('batch').addEventListener('change', () => { settings.batch = +$('batch').value; saveSettings(); });
 $('lang').addEventListener('change', async () => {
   raw.set('mt-lang', lang());
   // لغة ثانية = ترجمة ثانية (نشوف إذا محفوظة)
@@ -106,6 +108,7 @@ $('noPunct').addEventListener('change', async () => {
     for (const p of state.pages) {
       if (!p.tr?.length) continue;
       p.tr.forEach((b) => (b.tr = cleanPunct(b.tr, lang())));
+      p.tr = p.tr.filter((b) => /[\p{L}\p{N}]/u.test(b.tr));
       saveTr(p);
     }
   }
@@ -292,7 +295,7 @@ async function addFiles(fileList) {
   const ready = state.pages.filter((p) => p.tr).length;
   const left = state.pages.length - ready;
   status(`جاهز: ${state.pages.length} صفحة` + (ready ? ` (${ready} مترجمة من قبل ✅)` : '') +
-    (left ? `\nتحتاج تقريباً ${Math.ceil(left / BATCH)} طلب من Gemini. اضغط «🌐 ترجم».` : ''));
+    (left ? `\nتحتاج تقريباً ${Math.ceil(left / BATCH())} طلب من Gemini. اضغط «🌐 ترجم».` : ''));
   rerenderAll();
 }
 $('files').addEventListener('change', (e) => { addFiles(e.target.files); e.target.value = ''; });
@@ -500,6 +503,8 @@ async function translateAll(only, { single = false } = {}) {
 
   const finish = (p, boxes) => {
     if (settings.noPunct) boxes.forEach((b) => (b.tr = cleanPunct(b.tr, lang())));
+    // «...» أو فقاعة بدون كلام: نخليها مثل ما هي في الصورة
+    boxes = boxes.filter((b) => /[\p{L}\p{N}]/u.test(b.tr) && /[\p{L}\p{N}]/u.test(b.text || 'x'));
     p.tr = boxes;
     saveTr(p);
     boxes.forEach((b) => state.ctx.push(`${b.text} → ${b.tr}`));
@@ -553,7 +558,7 @@ async function translateAll(only, { single = false } = {}) {
       let cur = [], n = 0;
       for (const p of todo) {
         p.parts = p.parts || await pageParts(p.data, p.mime);
-        if (cur.length && n + p.parts.length > BATCH) { batches.push(cur); cur = []; n = 0; }
+        if (cur.length && n + p.parts.length > BATCH()) { batches.push(cur); cur = []; n = 0; }
         cur.push(p);
         n += p.parts.length;
       }
