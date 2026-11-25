@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>منزّل فصول المانهوا</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <header>
+    <img src="icons/48.png" alt="" width="28" height="28">
+    <h1>منزّل فصول المانهوا</h1>
+  </header>
+  <p class="hint">تلتقط صور الفصل صورة صورة من المتصفح. لو طلع شريط أصفر «بدأ تصحيح الأخطاء» فهذا طبيعي.</p>
+
+  <section class="card">
+    <div id="pageTitle" class="page-title">افتح صفحة فصل ثم اضغط «فحص الصفحة»</div>
+    <div class="row">
+      <button id="scanBtn" class="primary">🔍 فحص الصفحة</button>
+      <button id="scrollBtn" title="ينزل لآخر الصفحة عشان تبان كل الصور المؤجلة ثم يفحص">⬇️ تمرير + فحص</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <label class="field">اسم الملف
+      <input id="nameInput" type="text" placeholder="اسم الفصل">
+    </label>
+    <div class="field">الصيغة</div>
+    <div class="formats">
+      <label><input type="radio" name="fmt" value="zip" checked> ZIP</label>
+      <label><input type="radio" name="fmt" value="pdf"> PDF</label>
+      <label><input type="radio" name="fmt" value="images"> صور منفصلة</label>
+    </div>
+    <label class="check"><input id="shotOnly" type="checkbox"> صوّر كل صورة من الشاشة دائماً (للمواقع اللي تخربط الصور)</label>
+    <label class="check"><input id="saveAs" type="checkbox"> اسألني وين أحفظ</label>
+    <button id="downloadBtn" class="primary big" disabled>⬇️ تحميل الفصل</button>
+    <button id="stopBtn" hidden>⏹️ إيقاف</button>
+    <div id="progress" class="progress" hidden><div id="bar"></div></div>
+    <div id="status" class="status"></div>
+    <details id="logBox" class="log" hidden><summary>تفاصيل (صوّرها وأرسلها لو فيه مشكلة)</summary><pre id="log"></pre></details>
+  </section>
+
+  <section class="card">
+    <div class="row between">
+      <strong id="count">0 صورة</strong>
+      <span class="row small">
+        <button id="selAll">تحديد الكل</button>
+        <button id="selNone">إلغاء الكل</button>
+      </span>
+    </div>
+    <div id="grid" class="grid"></div>
+  </section>
+
+  <script type="module" src="sidepanel.js"></script>
+</body>
+</html>

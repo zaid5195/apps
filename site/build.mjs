@@ -199,6 +199,8 @@ const iconsDir = join(root, 'icons');
 if (existsSync(iconsDir)) cpSync(iconsDir, join(out, 'icons'), { recursive: true });
 const adminDir = join(root, 'admin');
 if (existsSync(adminDir)) cpSync(adminDir, join(out, 'admin'), { recursive: true });
+const translateDir = join(root, 'translate');
+if (existsSync(translateDir)) cpSync(translateDir, join(out, 'translate'), { recursive: true });
 const cfgDir = join(root, 'config');
 if (existsSync(cfgDir)) cpSync(cfgDir, join(out, 'config'), { recursive: true });
 for (const a of apps) {
