@@ -1,41 +1,46 @@
-// ترجمة صور الفصل عبر Gemini + رسم الترجمة على الصورة
+// الترجمة عبر Gemini: عدة صفحات في طلب واحد + قاموس أسماء + تعامل ذكي مع حدود الحصة المجانية
 const API = 'https://generativelanguage.googleapis.com/v1beta';
 
 export const LANGS = {
-  ar: { name: 'العربية', prompt: 'Arabic (Modern Standard Arabic / الفصحى)', rtl: true },
+  ar: { name: 'العربية', prompt: 'Modern Standard Arabic (الفصحى) — simple, natural and smooth, like professional Arabic manhwa scanlations', rtl: true },
   en: { name: 'English', prompt: 'English', rtl: false },
   fr: { name: 'Français', prompt: 'French', rtl: false },
   es: { name: 'Español', prompt: 'Spanish', rtl: false },
 };
 
-export class FatalError extends Error {}
+export class FatalError extends Error {}   // مفتاح غلط… نوقف كل شي
+export class QuotaError extends Error {}   // الحصة اليومية خلصت لكل الموديلات
+export class StopError extends Error {}    // المستخدم وقّف
 
-async function apiFetch(path, key, body) {
-  const res = await fetch(`${API}/${path}`, {
-    method: body ? 'POST' : 'GET',
-    headers: { 'x-goog-api-key': key, ...(body ? { 'content-type': 'application/json' } : {}) },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  let data = null;
-  try { data = await res.json(); } catch {}
-  if (!res.ok) {
-    const msg = data?.error?.message || `HTTP ${res.status}`;
-    if (res.status === 429 || res.status >= 500) {
-      const retry = data?.error?.details?.find((d) => d.retryDelay)?.retryDelay;
-      const err = new Error(msg);
-      err.retryMs = retry ? parseFloat(retry) * 1000 + 500 : (res.status === 429 ? 15000 : 5000);
-      throw err;
-    }
-    if (res.status === 400 && /api key/i.test(msg)) throw new FatalError('مفتاح Gemini غير صحيح');
-    if (res.status === 401 || res.status === 403) throw new FatalError('مفتاح Gemini مرفوض: ' + msg);
-    throw new Error(msg);
-  }
-  return data;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const ls = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+// حصة Gemini تتجدد منتصف الليل بتوقيت المحيط الهادئ
+export const quotaDay = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+
+export function usageToday() {
+  const u = ls.get('mt-usage', null);
+  return u?.day === quotaDay() ? u.n : 0;
 }
+function countUsage() { ls.set('mt-usage', { day: quotaDay(), n: usageToday() + 1 }); }
+
+function exhausted() {
+  const e = ls.get('mt-exhausted', null);
+  return e?.day === quotaDay() ? e.models : [];
+}
+function markExhausted(m) { ls.set('mt-exhausted', { day: quotaDay(), models: [...new Set([...exhausted(), m])] }); }
 
 // قائمة موديلات بالترتيب: الأحدث المستقر أولاً، بعده التجريبي، وآخر شي «lite»
 export async function pickModels(key) {
-  const data = await apiFetch('models?pageSize=200', key);
+  const res = await fetch(`${API}/models?pageSize=200`, { headers: { 'x-goog-api-key': key } });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = data?.error?.message || `HTTP ${res.status}`;
+    if (res.status === 400 || res.status === 401 || res.status === 403) throw new FatalError('مفتاح Gemini غير صحيح أو مرفوض — تأكد إنك نسخته كامل');
+    throw new Error(msg);
+  }
   const names = (data.models || []).filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'))
     .map((m) => m.name.replace(/^models\//, ''))
     .filter((n) => /^gemini-[\d.]+-flash/.test(n) && !/image|tts|live|audio|thinking|8b|embedding|exp/.test(n));
@@ -47,32 +52,120 @@ export async function pickModels(key) {
   return list.slice(0, 6);
 }
 
-const SCHEMA = {
-  type: 'ARRAY',
-  items: {
-    type: 'OBJECT',
-    properties: {
-      box_2d: { type: 'ARRAY', items: { type: 'INTEGER' } },
-      text: { type: 'STRING' },
-      translation: { type: 'STRING' },
-      bg: { type: 'STRING' },
-    },
-    required: ['box_2d', 'text', 'translation'],
-  },
-};
-
-function prompt(lang, context) {
-  return `You are a professional manhwa/manga/webtoon translator and letterer.
-Find every speech bubble, thought bubble, narration box and story-relevant caption or sign in this comic image.
-Ignore sound effects (SFX/onomatopoeia), watermarks, scanlation credits and website logos.
-For each one return:
-- box_2d: [ymin, xmin, ymax, xmax] normalized to 0-1000, covering the text area inside the bubble (the part that will be painted over).
-- text: the original text.
-- translation: a natural, fluent ${LANGS[lang]?.prompt || lang} translation that fits a comic bubble (short and conversational, keep character names consistent, keep emotion and punctuation like ! and ...).
-- bg: the bubble background color as hex (e.g. #ffffff).
-Return them in reading order. If there is no text, return [].` +
-    (context?.length ? `\n\nPrevious lines of this chapter (for consistent names and tone):\n${context.join('\n')}` : '');
+// هل الرفض بسبب الحصة اليومية ولا حد الدقيقة؟
+function quotaInfo(data) {
+  const details = data?.error?.details || [];
+  const retry = details.find((d) => d.retryDelay)?.retryDelay;
+  const viol = details.flatMap((d) => d.violations || []);
+  const msg = data?.error?.message || '';
+  const daily = viol.some((v) => /PerDay/i.test(v.quotaId || '') || /per.?day/i.test(v.quotaMetric || '')) ||
+    /per.?day|limit: 0\b/i.test(msg);
+  return { daily, retryMs: retry ? parseFloat(retry) * 1000 + 800 : 30000 };
 }
+
+export class Gemini {
+  constructor(key, { preferred, onEvent } = {}) {
+    this.key = key;
+    this.preferred = preferred;
+    this.onEvent = onEvent || (() => {});
+    this.list = null;
+    this.i = 0;
+    this.cool = 0;     // انتظار مشترك لكل الطلبات (حد الدقيقة)
+    this.active = 0;
+    this.limit = 2;    // طلبين في نفس الوقت، ينزل لواحد لو وصلنا الحد
+  }
+
+  async init() {
+    if (this.list) return;
+    let cached = ls.get('mt-models', null);
+    let list = cached?.k === this.key.slice(-6) && Date.now() - cached.t < 86400000 ? cached.list : null;
+    if (!list) {
+      try { list = await pickModels(this.key); } catch (e) { if (e instanceof FatalError) throw e; list = ['gemini-2.5-flash', 'gemini-2.5-flash-lite']; }
+      ls.set('mt-models', { k: this.key.slice(-6), t: Date.now(), list });
+    }
+    this.all = list;
+    if (this.preferred) list = [this.preferred, ...list.filter((m) => m !== this.preferred)];
+    const ex = exhausted();
+    this.list = list.filter((m) => !ex.includes(m));
+    if (!this.list.length) throw new QuotaError('الحصة اليومية المجانية خلصت لكل موديلات Gemini');
+    this.i = 0;
+    this.onEvent({ type: 'model', model: this.model });
+  }
+
+  get model() { return this.list[this.i]; }
+
+  drop(model, why) {
+    const k = this.list.indexOf(model);
+    if (k < 0) return;
+    this.list.splice(k, 1);
+    if (why === 'daily') markExhausted(model);
+    if (!this.list.length) throw new QuotaError('الحصة اليومية المجانية خلصت لكل موديلات Gemini');
+    if (this.i >= this.list.length) this.i = 0;
+    this.onEvent({ type: 'model', model: this.model, why });
+  }
+
+  async request(body, signal) {
+    await this.init();
+    let net = 0, busy = 0, minute = 0;
+    for (;;) {
+      if (signal?.aborted) throw new StopError('توقفت');
+      while (Date.now() < this.cool) {
+        if (signal?.aborted) throw new StopError('توقفت');
+        this.onEvent({ type: 'wait', seconds: Math.ceil((this.cool - Date.now()) / 1000), why: 'minute' });
+        await sleep(Math.min(1000, this.cool - Date.now()));
+      }
+      while (this.active >= this.limit) await sleep(150);
+      const model = this.model;
+      this.active++;
+      let res, data;
+      try {
+        res = await fetch(`${API}/models/${model}:generateContent`, {
+          method: 'POST',
+          headers: { 'x-goog-api-key': this.key, 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        data = await res.json().catch(() => null);
+      } catch (e) {
+        this.active--;
+        if (++net > 5) throw new Error('الاتصال بـ Gemini ينقطع — تأكد من الإنترنت');
+        this.onEvent({ type: 'wait', seconds: 2 * net, why: 'network' });
+        await sleep(2000 * net);
+        continue;
+      }
+      this.active--;
+      if (res.ok) { countUsage(); this.onEvent({ type: 'usage', n: usageToday() }); return data; }
+
+      const msg = data?.error?.message || `HTTP ${res.status}`;
+      if (res.status === 429) {
+        const q = quotaInfo(data);
+        if (q.daily) { this.drop(model, 'daily'); continue; }
+        // حد الدقيقة: ننتظر كلنا مع بعض ونخفف السرعة
+        this.limit = 1;
+        if (++minute > 12) throw new Error('Gemini يرفض الطلبات من فترة — جرّب بعد شوي');
+        this.cool = Math.max(this.cool, Date.now() + Math.min(q.retryMs, 90000));
+        continue;
+      }
+      if (res.status >= 500) {
+        // الموديل مزحوم: نجرّب موديل ثاني
+        if (++busy > 10) throw new Error('Gemini مزحوم جداً الحين — جرّب بعد شوي');
+        if (busy % 2 === 0 && this.list.length > 1) {
+          this.i = (this.i + 1) % this.list.length;
+          this.onEvent({ type: 'model', model: this.model, why: 'busy' });
+        }
+        this.onEvent({ type: 'wait', seconds: 4, why: 'busy' });
+        await sleep(4000);
+        continue;
+      }
+      if (res.status === 404 || /not found|not supported|is not available/i.test(msg)) { this.drop(model, 'missing'); continue; }
+      if ((res.status === 400 && /api key/i.test(msg)) || res.status === 401 || res.status === 403) {
+        throw new FatalError('مفتاح Gemini غير صحيح أو مرفوض — تأكد إنك نسخته كامل');
+      }
+      throw new Error(msg);
+    }
+  }
+}
+
+// ---------- تجهيز الصور ----------
 
 const toB64 = async (blob) => {
   const buf = new Uint8Array(await blob.arrayBuffer());
@@ -95,151 +188,135 @@ function chunks(w, h) {
   return out;
 }
 
-// models = { list: [...], i: 0 } مشتركة بين كل الصور: لو موديل مزحوم ننتقل للي بعده للكل
-async function generate(body, key, models, signal) {
-  let net = 0, busy = 0;
-  for (let attempt = 0; attempt < 12; attempt++) {
-    if (signal?.aborted) throw new FatalError('توقفت الترجمة');
-    const model = models.list[models.i];
-    try {
-      return await apiFetch(`models/${model}:generateContent`, key, body);
-    } catch (e) {
-      if (e instanceof FatalError) throw e;
-      const wait = (ms, why) => { signal?.onWait?.(Math.round(ms / 1000), why); return new Promise((r) => setTimeout(r, ms)); };
-      if (e instanceof TypeError) { // انقطاع اتصال
-        if (++net > 4) throw new Error('الاتصال بـ Gemini ينقطع — تأكد من الإنترنت');
-        await wait(2000 * net, 'اتصال');
-        continue;
-      }
-      if (!e.retryMs) {
-        // موديل غير متاح لهذا المفتاح: نجرب اللي بعده
-        if (/not found|not supported|unavailable/i.test(e.message) && models.i < models.list.length - 1) { models.i++; signal?.onModel?.(models.list[models.i]); continue; }
-        throw e;
-      }
-      // مزحوم أو خلصت الحصة: ننتقل لموديل ثاني، ولو خلصت الموديلات ننتظر
-      busy++;
-      if (models.i < models.list.length - 1 && (busy >= 2 || e.retryMs > 20000)) {
-        models.i++; busy = 0;
-        signal?.onModel?.(models.list[models.i]);
-        continue;
-      }
-      if (models.i >= models.list.length - 1 && busy >= 2) { models.i = 0; signal?.onModel?.(models.list[0]); }
-      await wait(Math.min(e.retryMs, 60000), 'ضغط');
-    }
-  }
-  throw new Error('Gemini مشغول جداً الحين — جرّب بعد شوي');
-}
-
-export async function translateImage(bytes, mime, { key, models, lang, context, signal }) {
-  const bmp = await createImageBitmap(new Blob([bytes], { type: mime }));
+// أجزاء الصفحة (بدون ترميز) — نرمّزها وقت الإرسال بس
+export async function pageParts(data, mime) {
+  const bmp = await createImageBitmap(new Blob([data], { type: mime }));
   const W = bmp.width, H = bmp.height;
-  const scale = Math.min(1, 1600 / W);
-  const boxes = [];
-  try {
-    for (const c of chunks(W, H)) {
-      const cw = Math.round(W * scale), chh = Math.round(c.h * scale);
-      const canvas = new OffscreenCanvas(cw, chh);
-      canvas.getContext('2d').drawImage(bmp, 0, c.y, W, c.h, 0, 0, cw, chh);
-      const data = await toB64(await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.9 }));
-      const body = {
-        contents: [{ parts: [{ inline_data: { mime_type: 'image/jpeg', data } }, { text: prompt(lang, context) }] }],
-        generationConfig: { temperature: 0.3, responseMimeType: 'application/json', responseSchema: SCHEMA },
-      };
-      const res = await generate(body, key, models, signal);
-      const cand = res.candidates?.[0];
-      const txt = (cand?.content?.parts || []).map((p) => p.text || '').join('');
-      let list = [];
-      try { list = JSON.parse(txt.replace(/^```(json)?|```$/g, '').trim()); } catch { list = []; }
-      for (const b of Array.isArray(list) ? list : []) {
-        const [y0, x0, y1, x1] = (b.box_2d || []).map(Number);
-        if (![y0, x0, y1, x1].every(Number.isFinite) || !b.translation?.trim()) continue;
-        const top = c.y + (Math.min(y0, y1) / 1000) * c.h, bottom = c.y + (Math.max(y0, y1) / 1000) * c.h;
-        const mid = (top + bottom) / 2;
-        if (mid < c.own[0] || mid >= c.own[1]) continue; // مكررة في منطقة التداخل
-        boxes.push({
-          x: Math.min(x0, x1) / 1000, w: Math.abs(x1 - x0) / 1000,
-          y: top / H, h: (bottom - top) / H,
-          text: b.text || '', tr: b.translation.trim(), bg: /^#[0-9a-f]{3,8}$/i.test(b.bg || '') ? b.bg : '#ffffff',
-        });
-      }
-    }
-  } finally {
-    bmp.close();
-  }
-  return boxes;
-}
-
-// ---------- الرسم ----------
-
-export function textColor(bg) {
-  let h = bg.replace('#', '');
-  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
-  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) || 0);
-  return 0.299 * r + 0.587 * g + 0.114 * b > 140 ? '#111' : '#fff';
-}
-
-export const FONT = '"Noto Naskh Arabic", "Segoe UI", Tahoma, "Noto Sans", Arial, sans-serif';
-
-// يلف النص على أسطر ويختار أكبر خط يدخل في المربع
-export function fitText(measure, text, w, h, maxSize) {
-  const words = text.split(/\s+/).filter(Boolean);
-  for (let size = Math.floor(maxSize); size >= 7; size -= size > 24 ? 2 : 1) {
-    const lh = size * 1.2;
-    const lines = [];
-    let line = '';
-    let ok = true;
-    for (const word of words) {
-      const t = line ? line + ' ' + word : word;
-      if (measure(t, size) <= w) { line = t; continue; }
-      if (line) lines.push(line);
-      if (measure(word, size) > w) { ok = false; break; }
-      line = word;
-    }
-    if (!ok) continue;
-    if (line) lines.push(line);
-    if (lines.length * lh <= h) return { size, lines, lh };
-  }
-  // آخر حل: خط صغير ونكسر الكلمات
-  const size = 7, lh = 8.4, lines = [];
-  let line = '';
-  for (const ch of text) { if (measure(line + ch, size) > w && line) { lines.push(line); line = ch; } else line += ch; }
-  if (line) lines.push(line);
-  return { size, lines, lh };
-}
-
-export function expand(b) {
-  const px = b.w * 0.06, py = b.h * 0.08;
-  const x = Math.max(0, b.x - px), y = Math.max(0, b.y - py);
-  return { x, y, w: Math.min(1, b.x + b.w + px) - x, h: Math.min(1, b.y + b.h + py) - y };
-}
-
-export async function renderTranslated(bytes, mime, boxes, lang) {
-  const bmp = await createImageBitmap(new Blob([bytes], { type: mime }));
-  const W = bmp.width, H = bmp.height;
-  const canvas = new OffscreenCanvas(W, H);
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(bmp, 0, 0);
   bmp.close();
-  const rtl = LANGS[lang]?.rtl ?? true;
-  const measure = (t, s) => { ctx.font = `600 ${s}px ${FONT}`; return ctx.measureText(t).width; };
-  for (const b of boxes) {
-    const e = expand(b);
-    const x = e.x * W, y = e.y * H, w = e.w * W, h = e.h * H;
-    const r = Math.min(w, h) * 0.25;
-    ctx.fillStyle = b.bg;
-    ctx.beginPath();
-    ctx.roundRect(x, y, w, h, r);
-    ctx.fill();
-    const pad = Math.min(w, h) * 0.08;
-    const fit = fitText(measure, b.tr, w - pad * 2, h - pad * 2, Math.min(h * 0.45, W * 0.06));
-    ctx.font = `600 ${fit.size}px ${FONT}`;
-    ctx.fillStyle = textColor(b.bg);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.direction = rtl ? 'rtl' : 'ltr';
-    const top = y + h / 2 - (fit.lines.length * fit.lh) / 2 + fit.lh / 2;
-    fit.lines.forEach((ln, i) => ctx.fillText(ln, x + w / 2, top + i * fit.lh));
+  return chunks(W, H).map((c) => ({ ...c, W, H }));
+}
+
+async function encodePart(data, mime, part) {
+  const bmp = await createImageBitmap(new Blob([data], { type: mime }));
+  const scale = Math.min(1, 1280 / part.W);
+  const cw = Math.round(part.W * scale), ch = Math.round(part.h * scale);
+  const canvas = new OffscreenCanvas(cw, ch);
+  canvas.getContext('2d').drawImage(bmp, 0, part.y, part.W, part.h, 0, 0, cw, ch);
+  bmp.close();
+  return toB64(await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.88 }));
+}
+
+// ---------- الطلب ----------
+
+const BUBBLE = {
+  type: 'OBJECT',
+  properties: {
+    box_2d: { type: 'ARRAY', items: { type: 'INTEGER' } },
+    text: { type: 'STRING' },
+    translation: { type: 'STRING' },
+    bg: { type: 'STRING' },
+  },
+  required: ['box_2d', 'text', 'translation'],
+};
+const SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    pages: {
+      type: 'ARRAY',
+      items: { type: 'OBJECT', properties: { image: { type: 'INTEGER' }, bubbles: { type: 'ARRAY', items: BUBBLE } }, required: ['image', 'bubbles'] },
+    },
+    names: {
+      type: 'ARRAY',
+      items: { type: 'OBJECT', properties: { original: { type: 'STRING' }, translation: { type: 'STRING' } }, required: ['original', 'translation'] },
+    },
+  },
+  required: ['pages'],
+};
+
+function systemPrompt({ lang, glossary, notes, noPunct }) {
+  const L = LANGS[lang]?.prompt || lang;
+  const g = (glossary || []).filter((e) => e.o && e.t).slice(0, 200);
+  return `You are an expert manhwa / manga / webtoon translator and letterer. Translate into ${L}.
+You receive consecutive images of the same chapter, labeled "Image 1", "Image 2", ... in reading order (top to bottom).
+
+For EACH image, find every speech bubble, thought bubble, narration box and story-relevant caption or sign.
+Ignore sound effects (SFX / onomatopoeia), watermarks, scanlation credits, website logos and ads.
+
+Rules:
+- One entry per bubble: join all lines of the same bubble into one text.
+- box_2d = [ymin, xmin, ymax, xmax], normalized 0-1000 relative to THAT image only, tightly around the text inside the bubble.
+- translation: natural and fluent, short enough to fit the bubble, keep the emotion and tone of each character. Translate meaning, not word by word.
+- Keep "!" and "?" when they carry emotion.${noPunct ? '\n- Do NOT use periods, ellipses or commas in translations (no "." "..." "…" "," "،"). Use line breaks of meaning instead.' : ''}
+- Proper nouns (characters, places, organizations, skills, items, ranks): transliterate them consistently. ${g.length ? 'Use the glossary below EXACTLY.' : ''}
+- In "names", list every proper noun that appears in these images with the translation you used (including ones already in the glossary).
+- bg = the background color of the bubble as hex (e.g. #ffffff).
+- Return one entry in "pages" for EVERY image (use "bubbles": [] when it has no text).` +
+    (g.length ? `\n\nGlossary (original → translation):\n${g.map((e) => `${e.o} → ${e.t}`).join('\n')}` : '') +
+    (notes?.trim() ? `\n\nNotes from the reader about this series (follow them):\n${notes.trim()}` : '');
+}
+
+// items: [{ data, mime, part }]  ← أجزاء متتالية (من صفحة وحدة أو أكثر)
+// يرجع: { results: [boxes[] | null لكل جزء], names: [...] }
+export async function translateBatch(gem, items, { lang, glossary, notes, noPunct, context, signal }) {
+  const parts = [];
+  if (context?.length) parts.push({ text: `Previous lines of this chapter (for context and consistent names):\n${context.join('\n')}` });
+  for (let i = 0; i < items.length; i++) {
+    const b64 = await encodePart(items[i].data, items[i].mime, items[i].part);
+    parts.push({ text: `Image ${i + 1}:` });
+    parts.push({ inline_data: { mime_type: 'image/jpeg', data: b64 } });
   }
-  const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.93 });
-  return new Uint8Array(await blob.arrayBuffer());
+  parts.push({ text: `Translate all ${items.length} image(s). Return JSON.` });
+  const body = {
+    systemInstruction: { parts: [{ text: systemPrompt({ lang, glossary, notes, noPunct }) }] },
+    contents: [{ role: 'user', parts }],
+    generationConfig: { temperature: 0.3, responseMimeType: 'application/json', responseSchema: SCHEMA },
+  };
+  const res = await gem.request(body, signal);
+  const cand = res?.candidates?.[0];
+  if (!cand?.content) {
+    const why = cand?.finishReason || res?.promptFeedback?.blockReason || 'empty';
+    throw new Error(`Gemini ما رجّع نتيجة (${why})`);
+  }
+  const txt = (cand.content.parts || []).filter((p) => !p.thought).map((p) => p.text || '').join('');
+  let obj;
+  try { obj = JSON.parse(txt.replace(/^```(json)?|```$/g, '').trim()); } catch { throw new Error('رد Gemini ناقص (غالباً الرد طويل) '); }
+  const results = items.map(() => null);
+  const pages = Array.isArray(obj?.pages) ? obj.pages : [];
+  pages.forEach((p, k) => {
+    const idx = Number.isInteger(p.image) && p.image >= 1 && p.image <= items.length ? p.image - 1 : k;
+    if (idx >= items.length) return;
+    const { part } = items[idx];
+    const boxes = results[idx] || [];
+    for (const b of Array.isArray(p.bubbles) ? p.bubbles : []) {
+      const [y0, x0, y1, x1] = (b.box_2d || []).map(Number);
+      if (![y0, x0, y1, x1].every(Number.isFinite) || !b.translation?.trim()) continue;
+      const top = part.y + (Math.min(y0, y1) / 1000) * part.h, bottom = part.y + (Math.max(y0, y1) / 1000) * part.h;
+      const mid = (top + bottom) / 2;
+      if (mid < part.own[0] || mid >= part.own[1]) continue; // مكررة في منطقة التداخل
+      boxes.push({
+        x: Math.max(0, Math.min(x0, x1) / 1000), w: Math.min(1, Math.abs(x1 - x0) / 1000),
+        y: top / part.H, h: (bottom - top) / part.H,
+        text: (b.text || '').trim(), tr: b.translation.trim(),
+        bg: /^#[0-9a-f]{3,8}$/i.test(b.bg || '') ? b.bg : '#ffffff',
+      });
+    }
+    results[idx] = boxes;
+  });
+  const names = (Array.isArray(obj?.names) ? obj.names : [])
+    .map((n) => ({ o: String(n.original || '').trim(), t: String(n.translation || '').trim() }))
+    .filter((n) => n.o && n.t && n.o.length < 60 && n.t.length < 60);
+  return { results, names };
+}
+
+// حذف النقاط والفواصل (مع الإبقاء على ! و ؟)
+export function cleanPunct(s, lang) {
+  let t = String(s)
+    .replace(/\s*(\.{2,}|…)\s*/g, ' ')
+    .replace(/(\D)[.,،](?!\d)/g, '$1 ')
+    .replace(/^[.,،]+/, '')
+    .replace(/\s+([!?؟])/g, '$1')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  if (lang === 'ar') t = t.replace(/\?/g, '؟');
+  return t;
 }
