@@ -1,12 +1,14 @@
 import { makeZip } from './lib/zip.js';
 import { makePdf } from './lib/pdf.js';
+import { LANGS, FatalError, pickModel, translateImage, renderTranslated } from './lib/translate.js';
 
 // الفكرة: ما نطلب أي شي من الموقع. نأخذ الصور اللي المتصفح عرضها:
 // 1) الملف الأصلي من ذاكرة المتصفح (CDP: Page.getResourceContent)
 // 2) وإذا ما توفر: لقطة للصورة نفسها بدقتها الأصلية (CDP: Page.captureScreenshot)
 
 const $ = (id) => document.getElementById(id);
-let state = { tabId: null, pageUrl: '', items: [], busy: false };
+let state = { tabId: null, pageUrl: '', items: [], busy: false, cache: new Map(), stop: null };
+const cacheKey = (it) => `${state.pageUrl}#${it.frameId}#${it.idx}`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---------- دوال تنحقن في صفحة القارئ ----------
@@ -171,12 +173,19 @@ const progress = (done, total) => {
   $('progress').hidden = !total;
   $('bar').style.width = total ? `${Math.round((done / total) * 100)}%` : '0';
 };
-const setBusy = (b) => { state.busy = b; $('downloadBtn').disabled = b || !state.items.some((i) => i.on); $('scanBtn').disabled = $('scrollBtn').disabled = b; };
+const setBusy = (b) => {
+  state.busy = b;
+  const none = !state.items.some((i) => i.on);
+  $('downloadBtn').disabled = b || none;
+  $('trBtn').disabled = b || none;
+  $('scanBtn').disabled = $('scrollBtn').disabled = b;
+  $('stopBtn').hidden = !b;
+};
 
 function cleanName(s) {
   return (s || 'chapter')
     .replace(/\s*[|–—-]\s*(read|اقرأ|manga|manhwa|مانهوا|مانجا).*$/i, '')
-    .replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ')
+    .replace(/[\\/:*?"<>|~\u0000-\u001f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, ' ')
     .replace(/\s+/g, ' ').trim().slice(0, 120) || 'chapter';
 }
 
@@ -255,7 +264,7 @@ async function setReferer(pageUrl) {
   await chrome.declarativeNetRequest.updateSessionRules({
     removeRuleIds: [RULE_ID],
     addRules: [{ id: RULE_ID, priority: 1, action: { type: 'modifyHeaders', requestHeaders: headers },
-      condition: { initiatorDomains: [chrome.runtime.id], resourceTypes: ['xmlhttprequest', 'other'] } }],
+      condition: { initiatorDomains: [chrome.runtime.id], excludedRequestDomains: ['googleapis.com'], resourceTypes: ['xmlhttprequest', 'other'] } }],
   }).catch(() => {});
 }
 const clearReferer = () => chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [RULE_ID] }).catch(() => {});
@@ -355,6 +364,10 @@ async function scan(withScroll = false) {
     pickDefaults(items);
     state.items.forEach((i) => i.thumb && URL.revokeObjectURL(i.thumb));
     state.items = items;
+    for (const it of items) {
+      const c = state.cache.get(cacheKey(it));
+      if (c) Object.assign(it, { bytes: c.bytes, mime: c.mime, tr: c.tr, thumb: URL.createObjectURL(new Blob([c.bytes], { type: c.mime })) });
+    }
     $('pageTitle').textContent = main?.title || tab.title || '';
     $('nameInput').value = cleanName(main?.title || tab.title);
     $('logBox').hidden = true;
@@ -376,7 +389,7 @@ function render() {
   if (!state.items.length) grid.innerHTML = '<div class="empty">لا توجد صور بعد</div>';
   state.items.forEach((it, n) => {
     const d = document.createElement('div');
-    d.className = 'thumb' + (it.on ? ' on' : '') + (it.thumb ? ' done' : '') + (it.failed ? ' fail' : '');
+    d.className = 'thumb' + (it.on ? ' on' : '') + (it.thumb ? ' done' : '') + (it.failed ? ' fail' : '') + (it.tr ? ' tr' : '');
     if (it.thumb) {
       const img = document.createElement('img');
       img.src = it.thumb;
@@ -403,7 +416,7 @@ function render() {
 function updateCount() {
   const n = state.items.filter((i) => i.on).length;
   $('count').textContent = `${n} من ${state.items.length} صورة محددة`;
-  if (!state.busy) $('downloadBtn').disabled = n === 0;
+  if (!state.busy) $('downloadBtn').disabled = $('trBtn').disabled = n === 0;
 }
 
 // ---------- الالتقاط والتحميل ----------
@@ -451,53 +464,212 @@ async function captureItem(it, shotOnly) {
 
 async function saveBlob(blob, filename, saveAs) {
   const url = URL.createObjectURL(blob);
-  try { await chrome.downloads.download({ url, filename, saveAs, conflictAction: 'uniquify' }); }
+  try {
+    try { await chrome.downloads.download({ url, filename, saveAs, conflictAction: 'uniquify' }); }
+    catch (e) {
+      if (!/filename/i.test(e.message)) throw e;
+      // بعض المتصفحات ترفض الاسم: نحفظه باسم بديل بدل ما يضيع الملف
+      const ext = filename.match(/\.[a-z0-9]+$/i)?.[0] || '';
+      const safe = filename.replace(/\.[a-z0-9]+$/i, '').split('/').map((p) => p.replace(/[^\w\- ().]/g, '').trim() || 'chapter-' + Date.now()).join('/');
+      await chrome.downloads.download({ url, filename: safe + ext, saveAs, conflictAction: 'uniquify' });
+    }
+  }
   finally { setTimeout(() => URL.revokeObjectURL(url), 120000); }
 }
+
+// يجهز الالتقاط (أداة المتصفح + Referer + حفظ مكان القراءة) ويرجع كل شي لحاله بعده
+async function withCapture(log, fn) {
+  fixedHidden = false;
+  const tabTarget = { tabId: state.tabId };
+  let pos = null;
+  try {
+    const attached = await cdp.attach(state.tabId);
+    log.push('debugger: ' + (attached ? 'ok' : 'unavailable (' + cdp.err + ')'));
+    await setReferer(state.pageUrl);
+    [{ result: pos }] = await chrome.scripting.executeScript({ target: tabTarget, func: () => [scrollX, scrollY] });
+    return await fn();
+  } finally {
+    if (fixedHidden) await chrome.scripting.executeScript({ target: tabTarget, func: hideFixed, args: [false] }).catch(() => {});
+    if (pos) await chrome.scripting.executeScript({ target: tabTarget, func: (x, y) => scrollTo(x, y), args: pos }).catch(() => {});
+    await cdp.detach(state.tabId);
+    await clearReferer();
+  }
+}
+
+// يلتقط الصور اللي ما انلقطت قبل (اللي انلقطت تنحفظ وما نعيدها)
+async function captureMissing(items, log, used, onEach) {
+  const shotOnly = $('shotOnly').checked;
+  const todo = items.filter((it) => !it.bytes);
+  let failedLogged = 0;
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    if (state.stop?.aborted) break;
+    if (!it.bytes) {
+      status(`جاري التقاط الصورة ${todo.indexOf(it) + 1} من ${todo.length}…`);
+      try {
+        const { bytes, how } = await captureItem(it, shotOnly);
+        used[how] = (used[how] || 0) + 1;
+        it.bytes = bytes;
+        it.mime = sniffType(bytes)[0];
+        it.failed = false;
+        if (it.thumb) URL.revokeObjectURL(it.thumb);
+        it.thumb = URL.createObjectURL(new Blob([bytes], { type: it.mime }));
+        state.cache.set(cacheKey(it), { bytes, mime: it.mime, tr: it.tr });
+      } catch (e) {
+        it.failed = true;
+        if (++failedLogged <= 3) log.push(`#${state.items.indexOf(it) + 1}:\n   ${e.message}`);
+      }
+      progress(i + 1, items.length);
+      if (i % 5 === 4) render();
+    }
+    if (it.bytes) onEach?.(it);
+  }
+  render();
+}
+
+// ---------- الترجمة ----------
+
+let model = null;
+const trCtx = [];
+
+async function getModel(key) {
+  if (model) return model;
+  const { gemModel, gemModelKey } = await chrome.storage.local.get(['gemModel', 'gemModelKey']);
+  if (gemModel && gemModelKey === key.slice(-6)) return (model = gemModel);
+  try { model = await pickModel(key); } catch (e) { if (e instanceof FatalError) throw e; model = 'gemini-2.5-flash'; }
+  chrome.storage.local.set({ gemModel: model, gemModelKey: key.slice(-6) });
+  return model;
+}
+
+async function showOverlay(it) {
+  if (!it.tr?.length) return;
+  const target = { tabId: state.tabId, frameIds: [it.frameId] };
+  await chrome.scripting.executeScript({ target, files: ['overlay.js'] });
+  await chrome.scripting.executeScript({
+    target, func: (idx, boxes, rtl) => window.__mhdOverlay.add(idx, boxes, rtl), args: [it.idx, it.tr, LANGS[$('langSel').value]?.rtl ?? true],
+  });
+  $('ovBtn').disabled = false;
+  $('ovBtn').textContent = '👁️ إخفاء الترجمة';
+}
+
+// طابور ترجمة: ترجمتين في نفس الوقت، والالتقاط يكمل بالتوازي
+function makeTranslator(key, lang, stats) {
+  let active = 0, fatal = null, waiting = '';
+  const queue = [];
+  const done = [];
+  const pump = () => {
+    while (active < 2 && queue.length && !fatal && !state.stop?.aborted) {
+      const it = queue.shift();
+      active++;
+      const signal = { get aborted() { return state.stop?.aborted; }, onWait: (s) => { waiting = ` (Gemini طلب انتظار ${s} ثانية)`; } };
+      const p = (async () => {
+        const m = await getModel(key);
+        $('modelName').textContent = m;
+        it.tr = await translateImage(it.bytes, it.mime, { key, model: m, lang, context: trCtx.slice(-12), signal });
+        waiting = '';
+        it.tr.forEach((b) => trCtx.push(`${b.text} → ${b.tr}`));
+        const c = state.cache.get(cacheKey(it));
+        if (c) c.tr = it.tr;
+        stats.ok++;
+        stats.bubbles += it.tr.length;
+        await showOverlay(it).catch(() => {});
+        render();
+      })().catch((e) => {
+        if (e instanceof FatalError) { fatal = e; if (state.stop) state.stop.aborted = true; }
+        else { stats.fail++; stats.errs.push(e.message); }
+      }).finally(() => { active--; stats.update?.(waiting); pump(); });
+      done.push(p);
+    }
+  };
+  return {
+    add(it) { if (!it.tr && it.bytes) { queue.push(it); pump(); } },
+    async finish() {
+      while (queue.length || active) {
+        if (fatal) throw fatal;
+        await Promise.allSettled(done.slice());
+        await sleep(50);
+        pump();
+      }
+      if (fatal) throw fatal;
+    },
+    get waiting() { return waiting; },
+  };
+}
+
+async function translateChapter({ andThen } = {}) {
+  const key = $('keyInput').value.trim();
+  const items = state.items.filter((i) => i.on);
+  if (!key) { status('حط مفتاح Gemini أولاً (فوق في قسم الترجمة)', 'err'); $('keyInput').focus(); return null; }
+  if (!items.length) return null;
+  const lang = $('langSel').value;
+  if (state.trLang && state.trLang !== lang) { state.items.forEach((i) => (i.tr = null)); state.cache.forEach((c) => (c.tr = null)); trCtx.length = 0; }
+  state.trLang = lang;
+  setBusy(true);
+  state.stop = { aborted: false };
+  const log = [];
+  const used = {};
+  const stats = { ok: 0, fail: 0, bubbles: 0, errs: [] };
+  const total = items.filter((i) => !i.tr).length;
+  stats.update = (w) => status(`جاري الترجمة… ${stats.ok + stats.fail}/${total}${w || ''}`);
+  try {
+    const tr = makeTranslator(key, lang, stats);
+    await withCapture(log, () => captureMissing(items, log, used, (it) => {
+      if (it.tr) showOverlay(it).catch(() => {}); else tr.add(it);
+    }));
+    status(`جاري الترجمة… ${stats.ok + stats.fail}/${total}${tr.waiting}`);
+    await tr.finish();
+    if (stats.errs.length) log.push('translate errors:\n   ' + [...new Set(stats.errs)].slice(0, 3).join('\n   '));
+    const failedCap = items.filter((i) => i.failed).length;
+    if (!andThen) {
+      status(`تمت الترجمة ✅ ${stats.ok} صورة، ${stats.bubbles} فقاعة` +
+        (stats.fail || failedCap ? `\nفشلت ${stats.fail + failedCap} صورة — اضغط «ترجم الفصل» مرة ثانية يكمل الناقص` : ''), stats.fail || failedCap ? 'err' : 'ok');
+    }
+    return true;
+  } catch (e) {
+    status((e instanceof FatalError ? '' : 'صار خطأ في الترجمة: ') + e.message, 'err');
+    return null;
+  } finally {
+    if (log.length > 1) { $('log').textContent = log.join('\n'); $('logBox').hidden = false; }
+    if (!andThen) { setBusy(false); setTimeout(() => progress(0, 0), 1500); }
+  }
+}
+
+// ---------- التحميل ----------
 
 async function download() {
   const chosen = state.items.filter((i) => i.on);
   if (!chosen.length) return;
   const fmt = document.querySelector('input[name=fmt]:checked').value;
   const saveAs = $('saveAs').checked;
-  const shotOnly = $('shotOnly').checked;
-  const name = cleanName($('nameInput').value);
+  const withTr = $('trDl').checked;
+  const name = cleanName($('nameInput').value) + (withTr ? ` (${LANGS[$('langSel').value]?.name || ''})` : '');
   const pad = Math.max(3, String(chosen.length).length);
-  setBusy(true);
-  const files = [];
-  const failed = [];
-  const used = {};
   const log = [];
-  fixedHidden = false;
-  const tabTarget = { tabId: state.tabId };
-  let pos = null;
+  const used = {};
   try {
-    status('جاري التجهيز…');
-    const attached = await cdp.attach(state.tabId);
-    log.push('debugger: ' + (attached ? 'ok' : 'unavailable (' + cdp.err + ')'));
-    await setReferer(state.pageUrl);
-    [{ result: pos }] = await chrome.scripting.executeScript({ target: tabTarget, func: () => [scrollX, scrollY] });
-    progress(0, chosen.length);
+    if (withTr) {
+      // الترجمة تلتقط الصور الناقصة وتترجمها، بعدين نكمل التحميل
+      if (!(await translateChapter({ andThen: true }))) return;
+    } else {
+      setBusy(true);
+      state.stop = { aborted: false };
+      status('جاري التجهيز…');
+      if (chosen.some((i) => !i.bytes)) await withCapture(log, () => captureMissing(chosen, log, used));
+    }
+    const files = [];
+    const failed = [];
     for (let i = 0; i < chosen.length; i++) {
       const it = chosen[i];
-      status(`جاري التقاط الصورة ${i + 1} من ${chosen.length}…`);
-      try {
-        const { bytes, how } = await captureItem(it, shotOnly);
-        used[how] = (used[how] || 0) + 1;
-        const [mime, ext] = sniffType(bytes);
-        files.push({ name: `${String(i + 1).padStart(pad, '0')}.${ext}`, data: bytes, mime });
-        if (it.thumb) URL.revokeObjectURL(it.thumb);
-        it.thumb = URL.createObjectURL(new Blob([bytes], { type: mime }));
-        it.failed = false;
-      } catch (e) {
-        it.failed = true;
-        failed.push(i + 1);
-        if (failed.length <= 3) log.push(`#${i + 1}:\n   ${e.message}`);
+      if (!it.bytes) { failed.push(i + 1); continue; }
+      let data = it.bytes, mime = it.mime;
+      if (withTr && it.tr?.length) {
+        status(`جاري رسم الترجمة على الصور… ${i + 1}/${chosen.length}`);
+        data = await renderTranslated(it.bytes, it.mime, it.tr, state.trLang);
+        mime = 'image/jpeg';
       }
-      progress(i + 1, chosen.length);
-      if (i % 5 === 4 || i === chosen.length - 1) render();
+      const ext = sniffType(data)[1];
+      files.push({ name: `${String(i + 1).padStart(pad, '0')}.${ext}`, data, mime });
     }
-    log.push('methods: ' + JSON.stringify(used));
     if (!files.length) throw new Error('ما قدرت ألتقط أي صورة');
 
     if (fmt === 'zip') {
@@ -511,15 +683,12 @@ async function download() {
       for (const f of files) await saveBlob(new Blob([f.data], { type: f.mime }), `Manhwa/${name}/${f.name}`, false);
     }
     const how = Object.entries(used).map(([k, v]) => `${v} ${METHOD_NAMES[k]}`).join('، ');
-    status(`تم ✅ ${files.length} صورة (${how})` + (failed.length ? `\nما قدرت ألتقط الصور رقم: ${failed.join('، ')}` : ''), failed.length ? 'err' : 'ok');
+    status(`تم ✅ ${files.length} صورة` + (how ? ` (${how})` : '') + (failed.length ? `\nما قدرت ألتقط الصور رقم: ${failed.join('، ')}` : ''), failed.length ? 'err' : 'ok');
+    if (failed.length) log.push('failed: ' + failed.join(', '));
   } catch (e) {
     status('صار خطأ: ' + e.message, 'err');
   } finally {
-    if (fixedHidden) await chrome.scripting.executeScript({ target: tabTarget, func: hideFixed, args: [false] }).catch(() => {});
-    if (pos) await chrome.scripting.executeScript({ target: tabTarget, func: (x, y) => scrollTo(x, y), args: pos }).catch(() => {});
-    await cdp.detach(state.tabId);
-    await clearReferer();
-    if (failed.length || !files.length) { $('log').textContent = log.join('\n'); $('logBox').hidden = false; }
+    if (log.length > 1) { $('log').textContent = log.join('\n'); $('logBox').hidden = false; }
     setBusy(false);
     render();
     setTimeout(() => progress(0, 0), 1500);
@@ -528,12 +697,26 @@ async function download() {
 
 // ---------- الإعدادات والأحداث ----------
 
-chrome.storage.local.get({ fmt: 'zip', saveAs: false, shotOnly: false }).then(({ fmt, saveAs, shotOnly }) => {
-  const r = document.querySelector(`input[name=fmt][value=${fmt}]`);
+for (const [code, l] of Object.entries(LANGS)) $('langSel').add(new Option(l.name, code));
+chrome.storage.local.get({ fmt: 'zip', saveAs: false, shotOnly: false, trDl: false, gemKey: '', lang: 'ar' }).then((o) => {
+  const r = document.querySelector(`input[name=fmt][value=${o.fmt}]`);
   if (r) r.checked = true;
-  $('saveAs').checked = saveAs;
-  $('shotOnly').checked = shotOnly;
+  $('saveAs').checked = o.saveAs;
+  $('shotOnly').checked = o.shotOnly;
+  $('trDl').checked = o.trDl;
+  $('keyInput').value = o.gemKey;
+  $('langSel').value = o.lang;
 });
+$('keyInput').addEventListener('change', () => { model = null; chrome.storage.local.set({ gemKey: $('keyInput').value.trim() }); });
+$('langSel').addEventListener('change', () => chrome.storage.local.set({ lang: $('langSel').value }));
+$('trDl').addEventListener('change', () => chrome.storage.local.set({ trDl: $('trDl').checked }));
+$('trBtn').onclick = () => translateChapter();
+$('stopBtn').onclick = () => { if (state.stop) state.stop.aborted = true; status('جاري الإيقاف…'); };
+$('ovBtn').onclick = async () => {
+  const res = await chrome.scripting.executeScript({ target: { tabId: state.tabId, allFrames: true }, func: () => window.__mhdOverlay?.toggle() });
+  const shown = res.find((r) => r.result !== undefined && r.result !== null)?.result;
+  $('ovBtn').textContent = shown === false ? '👁️ إظهار الترجمة' : '👁️ إخفاء الترجمة';
+};
 document.querySelectorAll('input[name=fmt]').forEach((r) => r.addEventListener('change', () => chrome.storage.local.set({ fmt: r.value })));
 $('saveAs').addEventListener('change', () => chrome.storage.local.set({ saveAs: $('saveAs').checked }));
 $('shotOnly').addEventListener('change', () => chrome.storage.local.set({ shotOnly: $('shotOnly').checked }));
@@ -546,6 +729,9 @@ $('selNone').onclick = () => { if (state.busy) return; state.items.forEach((i) =
 chrome.tabs.onUpdated.addListener((id, info) => {
   if (!state.busy && id === state.tabId && info.url && info.url !== state.pageUrl) {
     state.items = [];
+    state.cache.clear();
+    trCtx.length = 0;
+    $('ovBtn').disabled = true;
     render();
     $('pageTitle').textContent = 'تغيّرت الصفحة — اضغط «فحص الصفحة»';
     status('');
