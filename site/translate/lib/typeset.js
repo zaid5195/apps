@@ -1,5 +1,12 @@
 // تنظيف الفقاعات من النص الأصلي + كتابة الترجمة داخل شكل الفقاعة
-import { textColor, FONT, LANGS } from './translate.js';
+export const DEFAULT_FONT = { family: '"Noto Naskh Arabic", "Segoe UI", Tahoma, Arial, sans-serif', weight: 700 };
+
+export function textColor(bg) {
+  let h = String(bg || '#fff').replace('#', '');
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) || 0);
+  return 0.299 * r + 0.587 * g + 0.114 * b > 140 ? '#111' : '#fff';
+}
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const hex = ([r, g, b]) => '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('');
@@ -170,12 +177,12 @@ function rowsFor(a, W) {
   return { left, right, y0: y0 + m, y1: y1 - m };
 }
 
-function layout(ctx, text, rows, W, origH) {
+function layout(ctx, text, rows, W, origH, font, scale) {
   const words = text.split(/\s+/).filter(Boolean);
   const H = rows.y1 - rows.y0;
   if (H <= 4 || !words.length) return null;
   // ما نكبّر الخط أكثر من حجم النص الأصلي
-  const maxSize = Math.min(H / 1.22, origH * 0.95, W * 0.075, 90);
+  const maxSize = Math.min(H / 1.22, origH * 0.95 * scale, W * 0.075 * scale, 90 * scale);
   const minSize = Math.max(8, W * 0.014);
   const span = (ya, yb) => {
     let L = -Infinity, R = Infinity;
@@ -186,7 +193,7 @@ function layout(ctx, text, rows, W, origH) {
     return R > L ? [L, R] : null;
   };
   for (let size = Math.floor(maxSize); size >= minSize; size -= size > 30 ? 2 : 1) {
-    ctx.font = `600 ${size}px ${FONT}`;
+    ctx.font = `${font.weight} ${size}px ${font.family}`;
     const lh = size * 1.22;
     const maxLines = Math.floor(H / lh);
     for (let n = 1; n <= maxLines; n++) {
@@ -226,7 +233,7 @@ async function toDataUrl(blob) {
 }
 
 // يرجع: الصورة المترجمة كاملة + قطع صغيرة (patches) تنحط فوق الفقاعات في الصفحة
-export async function typesetImage(bytes, mime, boxes, lang, { patches: wantPatches = true } = {}) {
+export async function typesetImage(bytes, mime, boxes, { patches: wantPatches = true, font = DEFAULT_FONT, scale = 1, rtl = true } = {}) {
   const bmp = await createImageBitmap(new Blob([bytes], { type: mime }));
   const W = bmp.width, H = bmp.height;
   const canvas = new OffscreenCanvas(W, H);
@@ -257,7 +264,6 @@ export async function typesetImage(bytes, mime, boxes, lang, { patches: wantPatc
   ctx.putImageData(img, 0, 0);
 
   // 3) نكتب الترجمة
-  const rtl = LANGS[lang]?.rtl ?? true;
   const patches = [];
   for (const g of groups) {
     const a = g.a;
@@ -286,15 +292,15 @@ export async function typesetImage(bytes, mime, boxes, lang, { patches: wantPatc
       ctx.restore();
     }
     const text = g.texts.join(' ');
-    let lay = layout(ctx, text, rows, W, a.tbox[3] - a.tbox[1]);
+    let lay = layout(ctx, text, rows, W, a.tbox[3] - a.tbox[1], font, scale);
     if (!lay) {
       // ما دخل حتى بأصغر خط: نصغّر أكثر ونكسر الكلمات
       const size = Math.max(7, W * 0.011);
-      ctx.font = `600 ${size}px ${FONT}`;
+      ctx.font = `${font.weight} ${size}px ${font.family}`;
       const cx = (a.tbox[0] + a.tbox[2]) / 2, cy = (rows.y0 + rows.y1) / 2;
       lay = { size, lines: [{ t: text, x: cx, y: cy }] };
     }
-    ctx.font = `${outline ? 800 : 600} ${lay.size}px ${FONT}`;
+    ctx.font = `${font.weight} ${lay.size}px ${font.family}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.direction = rtl ? 'rtl' : 'ltr';
