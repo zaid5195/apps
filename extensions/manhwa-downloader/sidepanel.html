@@ -11,7 +11,7 @@
     <img src="icons/48.png" alt="" width="28" height="28">
     <h1>منزّل فصول المانهوا</h1>
   </header>
-  <p class="hint">الإضافة تاخذ الصور اللي المتصفح عرضها أصلاً — ما ترسل أي طلب جديد للموقع. بيطلع شريط أصفر «بدأ تصحيح الأخطاء» أثناء الالتقاط، هذا طبيعي.</p>
+  <p class="hint">تلتقط صور الفصل صورة صورة من المتصفح. لو طلع شريط أصفر «بدأ تصحيح الأخطاء» فهذا طبيعي.</p>
 
   <section class="card">
     <div id="pageTitle" class="page-title">افتح صفحة فصل ثم اضغط «فحص الصفحة»</div>
@@ -36,6 +36,7 @@
     <button id="downloadBtn" class="primary big" disabled>⬇️ تحميل الفصل</button>
     <div id="progress" class="progress" hidden><div id="bar"></div></div>
     <div id="status" class="status"></div>
+    <details id="logBox" class="log" hidden><summary>تفاصيل (صوّرها وأرسلها لو فيه مشكلة)</summary><pre id="log"></pre></details>
   </section>
 
   <section class="card">

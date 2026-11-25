@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "منزّل فصول المانهوا",
   "short_name": "منزّل المانهوا",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "نزّل فصول المانهوا والمانجا من صفحة القارئ مباشرة: ZIP أو PDF أو صور منفصلة.",
   "icons": {
     "16": "icons/16.png",
@@ -29,7 +29,8 @@
     "storage",
     "sidePanel",
     "tabs",
-    "debugger"
+    "debugger",
+    "declarativeNetRequestWithHostAccess"
   ],
   "host_permissions": [
     "<all_urls>"
