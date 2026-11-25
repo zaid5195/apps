@@ -115,6 +115,13 @@ ol.how { padding-inline-start: 20px; color: var(--muted); font-size: 14px; }
       <label class="f">لغة الترجمة <select id="lang"></select></label>
       <label class="f">الموديل <select id="model"><option value="">تلقائي (الأفضل)</option></select></label>
     </div>
+    <label class="f">الدقة مقابل الحصة
+      <select id="batch">
+        <option value="1">صفحة في كل طلب — أدق مكان للنص (يستهلك حصة أكثر)</option>
+        <option value="2">صفحتين في كل طلب — متوازن</option>
+        <option value="4">4 صفحات في كل طلب — أقل طلبات</option>
+      </select>
+    </label>
   </section>
 
   <details class="card" id="seriesBox">
