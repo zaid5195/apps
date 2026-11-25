@@ -100,15 +100,26 @@ ol.how { padding-inline-start: 20px; color: var(--muted); font-size: 14px; }
 
   <section class="card" id="setup">
     <h2>⚙️ الإعداد <span class="muted" id="usage"></span></h2>
-    <label class="f">مفتاح Gemini (مجاني)
+    <label class="f">المزوّد
+      <select id="provider">
+        <option value="gemini">Gemini (Google) — أدق في تحديد الفقاعات</option>
+        <option value="groq">Groq (Llama 4) — سريع جداً</option>
+      </select>
+    </label>
+    <label class="f" id="geminiRow">مفتاح Gemini (مجاني)
       <input id="key" type="password" placeholder="الصق المفتاح هنا (يبدأ بـ AIza)" autocomplete="off">
     </label>
+    <label class="f" id="groqRow">مفتاح Groq (مجاني)
+      <input id="groqKey" type="password" placeholder="الصق المفتاح هنا (يبدأ بـ gsk_)" autocomplete="off">
+    </label>
+    <div class="muted" id="fallbackNote"></div>
     <details id="keyHelp" class="log">
       <summary>كيف آخذ مفتاح مجاني؟ (دقيقة وحدة)</summary>
       <ol class="how">
-        <li>افتح <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> وسجّل بحساب Google.</li>
-        <li>اضغط <b>Create API key</b> وانسخ المفتاح.</li>
-        <li>الصقه هنا. ينحفظ في متصفحك بس، وما يروح إلا لـ Google.</li>
+        <li><b>Gemini:</b> افتح <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> ← سجّل بحساب Google ← <b>Create API key</b>.</li>
+        <li><b>Groq:</b> افتح <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a> ← سجّل ← <b>Create API Key</b>.</li>
+        <li>الصق المفتاح هنا. ينحفظ في متصفحك بس، وما يروح إلا للشركة صاحبة المفتاح.</li>
+        <li>لو حطيت المفتاحين: لما تخلص حصة الأول اليومية، الموقع ينتقل للثاني ويكمل تلقائياً.</li>
       </ol>
     </details>
     <div class="row" style="margin-top:10px">

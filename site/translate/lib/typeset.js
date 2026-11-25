@@ -174,6 +174,28 @@ function eraseSoft(d, W, H, a) {
   inpaint(d, W, x0, y0, rw, rh, ink, null);
 }
 
+// اللون الأكثر تكراراً في وسط المربع
+function centerColor(d, W, x0, y0, x1, y1) {
+  const w = x1 - x0, h = y1 - y0;
+  const a0 = x0 + Math.floor(w * 0.25), a1 = x1 - Math.floor(w * 0.25), b0 = y0 + Math.floor(h * 0.25), b1 = y1 - Math.floor(h * 0.25);
+  const counts = new Map(), sums = new Map();
+  let total = 0;
+  const step = Math.max(1, Math.floor(Math.min(a1 - a0, b1 - b0) / 30));
+  for (let y = b0; y < b1; y += step) for (let x = a0; x < a1; x += step) {
+    const i = (y * W + x) * 4;
+    const k = ((d[i] >> 4) << 8) | ((d[i + 1] >> 4) << 4) | (d[i + 2] >> 4);
+    counts.set(k, (counts.get(k) || 0) + 1);
+    const s = sums.get(k) || [0, 0, 0];
+    s[0] += d[i]; s[1] += d[i + 1]; s[2] += d[i + 2];
+    sums.set(k, s);
+    total++;
+  }
+  let best = 0, bk = 0;
+  counts.forEach((c, k) => { if (c > best) { best = c; bk = k; } });
+  const s = sums.get(bk);
+  return { color: s ? s.map((v) => Math.round(v / best)) : [255, 255, 255], frac: total ? best / total : 0 };
+}
+
 // يحدد شكل الفقاعة: المنطقة المتصلة بنفس لون الخلفية حول النص + الثقوب (الحروف) داخلها
 function analyze(d, W, H, b) {
   // نجرب منطقة بحث أكبر لو النص صغير والفقاعة كبيرة
@@ -189,7 +211,12 @@ function analyzeOnce(d, W, H, b, k) {
   const tx0 = clamp(Math.floor(b.x * W), 0, W - 1), ty0 = clamp(Math.floor(b.y * H), 0, H - 1);
   const tx1 = clamp(Math.ceil((b.x + b.w) * W), tx0 + 1, W), ty1 = clamp(Math.ceil((b.y + b.h) * H), ty0 + 1, H);
   const tw = tx1 - tx0, th = ty1 - ty0;
-  const { color, frac } = bgColor(d, W, H, tx0, ty0, tx1, ty1);
+  let { color, frac } = bgColor(d, W, H, tx0, ty0, tx1, ty1);
+  // لو الحواف على رسم مزدحم (المربع أكبر من الفقاعة)، ناخذ اللون من وسط المربع
+  if (frac < 0.45) {
+    const c = centerColor(d, W, tx0, ty0, tx1, ty1);
+    if (c.frac >= 0.45) ({ color, frac } = { color: c.color, frac: Math.max(c.frac, 0.3) });
+  }
   const res = { tbox: [tx0, ty0, tx1, ty1], color, mode: 'rect', busy: false };
   if (frac < 0.3) return res; // خلفية معقدة (نص على الرسم)
 
@@ -205,7 +232,10 @@ function analyzeOnce(d, W, H, b, k) {
   const q = new Int32Array(rw * rh);
   let qh = 0, qt = 0;
   const push = (x, y) => { const p = y * rw + x; if (!F[p] && isBg(x, y)) { F[p] = 1; q[qt++] = p; } };
-  for (let y = ty0 - ry0; y < ty1 - ry0; y++) for (let x = tx0 - rx0; x < tx1 - rx0; x++) push(x, y);
+  // نبدأ من وسط المربع (لو Gemini أعطى مربع أكبر من الفقاعة ما نطلع برّاها)
+  const sx0 = tx0 + Math.floor(tw * 0.3), sx1 = Math.max(sx0 + 1, tx1 - Math.floor(tw * 0.3));
+  const sy0 = ty0 + Math.floor(th * 0.3), sy1 = Math.max(sy0 + 1, ty1 - Math.floor(th * 0.3));
+  for (let y = sy0 - ry0; y < sy1 - ry0; y++) for (let x = sx0 - rx0; x < sx1 - rx0; x++) push(x, y);
   while (qh < qt) {
     const p = q[qh++], x = p % rw, y = (p / rw) | 0;
     if (x > 0) push(x - 1, y);
@@ -220,7 +250,7 @@ function analyzeOnce(d, W, H, b, k) {
   if (ry1 < H) for (let x = 0; x < rw; x++) edge(x, rh - 1);
   if (rx0 > 0) for (let y = 0; y < rh; y++) edge(0, y);
   if (rx1 < W) for (let y = 0; y < rh; y++) edge(rw - 1, y);
-  if (qt < tw * th * 0.25) return res;
+  if (qt < (sx1 - sx0) * (sy1 - sy0) * 0.25) return res;
   if (per && leak / per > 0.12) { res.leaked = true; return res; }
 
   // الخارج = كل اللي يوصل له من حدود المنطقة بدون ما يمر بالفقاعة
@@ -250,7 +280,14 @@ function analyzeOnce(d, W, H, b, k) {
   let inside = 0, tot = 0;
   const st = Math.max(1, Math.floor(Math.min(tw, th) / 20));
   for (let y = ty0; y < ty1; y += st) for (let x = tx0; x < tx1; x += st) { tot++; if (M[(y - ry0) * rw + (x - rx0)]) inside++; }
-  if (tot && inside / tot < 0.85) return res;
+  if (tot && inside / tot < 0.85) {
+    // يمكن المربع أكبر من الفقاعة: لو الفقاعة كلها داخل المربع نقبلها ونصغّر المربع عليها
+    const bx0 = rx0 + mx0, by0 = ry0 + my0, bx1 = rx0 + mx1 + 1, by1 = ry0 + my1 + 1;
+    const ex = tw * 0.25, ey = th * 0.25;
+    const contained = bx0 >= tx0 - ex && bx1 <= tx1 + ex && by0 >= ty0 - ey && by1 <= ty1 + ey;
+    if (!contained || (bx1 - bx0) * (by1 - by0) < tw * th * 0.08) return res;
+    res.tbox = [Math.max(tx0, bx0), Math.max(ty0, by0), Math.min(tx1, bx1), Math.min(ty1, by1)];
+  }
   return Object.assign(res, { mode: 'mask', F, M, rx0, ry0, rw, rh, bbox: [rx0 + mx0, ry0 + my0, rx0 + mx1 + 1, ry0 + my1 + 1] });
 }
 

@@ -1,4 +1,4 @@
-import { LANGS, FatalError, QuotaError, StopError, Gemini, pageParts, translateBatch, cleanPunct, usageToday } from './lib/translate.js';
+import { LANGS, FatalError, QuotaError, StopError, Gemini, Groq, Providers, pageParts, translateBatch, cleanPunct, usageToday } from './lib/translate.js';
 import { typesetImage } from './lib/typeset.js';
 import { makeZip } from './lib/zip.js';
 import { makePdf } from './lib/pdf.js';
@@ -25,7 +25,7 @@ const FONTS = {
   lalezar: { label: 'Lalezar — كوميكس', family: 'Lalezar', weight: 400 },
   changa: { label: 'Changa — هندسي', family: 'Changa', weight: 600 },
 };
-const settings = Object.assign({ font: 'naskh', scale: 100, noPunct: true, autoNames: true, model: '', batch: 2 }, json.get('mt-settings', {}));
+const settings = Object.assign({ font: 'naskh', scale: 100, noPunct: true, autoNames: true, model: '', groqModel: '', provider: 'gemini', batch: 2 }, json.get('mt-settings', {}));
 const BATCH = () => settings.batch || 2; // كم صفحة في الطلب الواحد
 const saveSettings = () => json.set('mt-settings', settings);
 
@@ -39,7 +39,10 @@ const fontSpec = () => {
 // ---------- واجهة عامة ----------
 const status = (msg, cls = '') => { $('status').textContent = msg; $('status').className = 'status ' + cls; };
 const progress = (d, t) => { $('bar').style.width = t ? `${Math.round((d / t) * 100)}%` : '0'; };
-const showUsage = () => { const n = usageToday(); $('usage').textContent = n ? `طلبات اليوم: ${n}` : ''; };
+const showUsage = () => {
+  const g = usageToday('gemini'), q = usageToday('groq');
+  $('usage').textContent = g || q ? 'طلبات اليوم: ' + [g && `Gemini ${g}`, q && `Groq ${q}`].filter(Boolean).join(' · ') : '';
+};
 const log = (lines) => {
   if (!lines.length) { $('logBox').classList.add('hide'); return; }
   $('log').textContent = lines.join('\n');
@@ -58,18 +61,36 @@ const sniff = (b) => {
 for (const [code, l] of Object.entries(LANGS)) $('lang').add(new Option(l.name, code));
 $('lang').value = raw.get('mt-lang', 'ar');
 $('key').value = raw.get('mt-key', '');
-$('keyHelp').open = !$('key').value;
-$('key').addEventListener('change', () => raw.set('mt-key', $('key').value.trim()));
+$('groqKey').value = raw.get('mt-groq-key', '');
+$('provider').value = settings.provider;
+$('keyHelp').open = !$('key').value && !$('groqKey').value;
+const isGroq = () => settings.provider === 'groq';
+const modelKey = () => (isGroq() ? 'groqModel' : 'model');
+function providerUi() {
+  // المفتاح الأساسي فوق، والثاني تحته (اختياري)
+  const rows = [$('geminiRow'), $('groqRow')];
+  if (isGroq()) rows.reverse();
+  rows[0].after(rows[1]);
+  const other = isGroq() ? $('key').value.trim() : $('groqKey').value.trim();
+  $('fallbackNote').textContent = other
+    ? `✅ لو خلصت حصة ${isGroq() ? 'Groq' : 'Gemini'} اليومية، نكمل تلقائياً بـ ${isGroq() ? 'Gemini' : 'Groq'}.`
+    : `المفتاح الثاني اختياري: لو حطيته، نكمل فيه تلقائياً لما تخلص حصة الأول.`;
+  fillModels();
+}
 function fillModels() {
-  const list = json.get('mt-models', null)?.list || [];
+  const list = json.get(isGroq() ? 'mt-groq-models' : 'mt-models', null)?.list || [];
+  const cur = settings[modelKey()];
   const sel = $('model');
   while (sel.options.length > 1) sel.remove(1);
-  list.forEach((m) => sel.add(new Option(m, m)));
-  if (settings.model && !list.includes(settings.model)) sel.add(new Option(settings.model, settings.model));
-  sel.value = settings.model || '';
+  list.forEach((m) => sel.add(new Option(m.replace(/^meta-llama\//, ''), m)));
+  if (cur && !list.includes(cur)) sel.add(new Option(cur, cur));
+  sel.value = cur || '';
 }
-fillModels();
-$('model').addEventListener('change', () => { settings.model = $('model').value; saveSettings(); });
+$('key').addEventListener('change', () => { raw.set('mt-key', $('key').value.trim()); providerUi(); });
+$('groqKey').addEventListener('change', () => { raw.set('mt-groq-key', $('groqKey').value.trim()); providerUi(); });
+$('provider').addEventListener('change', () => { settings.provider = $('provider').value; saveSettings(); providerUi(); });
+providerUi();
+$('model').addEventListener('change', () => { settings[modelKey()] = $('model').value; saveSettings(); });
 $('batch').value = String(settings.batch);
 $('batch').addEventListener('change', () => { settings.batch = +$('batch').value; saveSettings(); });
 $('lang').addEventListener('change', async () => {
@@ -295,7 +316,7 @@ async function addFiles(fileList) {
   const ready = state.pages.filter((p) => p.tr).length;
   const left = state.pages.length - ready;
   status(`جاهز: ${state.pages.length} صفحة` + (ready ? ` (${ready} مترجمة من قبل ✅)` : '') +
-    (left ? `\nتحتاج تقريباً ${Math.ceil(left / BATCH())} طلب من Gemini. اضغط «🌐 ترجم».` : ''));
+    (left ? `\nتحتاج تقريباً ${Math.ceil(left / BATCH())} طلب. اضغط «🌐 ترجم».` : ''));
   rerenderAll();
 }
 $('files').addEventListener('change', (e) => { addFiles(e.target.files); e.target.value = ''; });
@@ -439,7 +460,7 @@ async function render(p) {
   p.status = 'done';
 }
 
-// إعادة رسم كل الصفحات المترجمة (بعد تغيير الخط أو الحجم) — بدون أي طلب لـ Gemini
+// إعادة رسم كل الصفحات المترجمة (بعد تغيير الخط أو الحجم) — بدون أي طلب للموديل
 let rerenderRun = 0;
 async function rerenderAll() {
   const run = ++rerenderRun;
@@ -460,15 +481,16 @@ async function rerenderAll() {
 
 // ---------- الترجمة ----------
 async function translateAll(only, { single = false } = {}) {
-  const key = $('key').value.trim();
-  if (!key) {
-    status('حط مفتاح Gemini أولاً ☝️', 'err');
+  const gKey = $('key').value.trim(), qKey = $('groqKey').value.trim();
+  if (!gKey && !qKey) {
+    status(`حط مفتاح ${isGroq() ? 'Groq' : 'Gemini'} أولاً ☝️`, 'err');
     $('keyHelp').open = true;
-    $('key').focus();
+    (isGroq() ? $('groqKey') : $('key')).focus();
     $('setup').scrollIntoView({ behavior: 'smooth' });
     return;
   }
-  raw.set('mt-key', key);
+  raw.set('mt-key', gKey);
+  raw.set('mt-groq-key', qKey);
   const todo = (only || state.pages).filter((p) => !p.tr);
   if (!todo.length) return;
   state.busy = true;
@@ -481,23 +503,28 @@ async function translateAll(only, { single = false } = {}) {
   const total = todo.length;
   const upd = () => { status(`جاري الترجمة… ${done}/${total}${note}`); progress(done, total); };
   upd();
-  const gem = new Gemini(key, {
-    preferred: settings.model || undefined,
-    onEvent: (e) => {
-      if (e.type === 'usage') showUsage();
-      if (e.type === 'model') {
-        fillModels();
-        if (e.why === 'daily') note = `\nخلصت حصة اليوم لموديل، انتقلنا لـ ${e.model}`;
-        else if (e.why === 'busy') note = `\n${e.model} (الموديل الأول مزحوم)`;
-        upd();
-      }
-      if (e.type === 'wait') {
-        note = e.why === 'minute' ? `\n⏳ وصلنا حد الطلبات بالدقيقة — نكمل بعد ${e.seconds} ث (ما يضيع شي)`
-          : e.why === 'network' ? `\n📶 انقطع الاتصال — نعيد بعد ${e.seconds} ث` : `\n⏳ Gemini مزحوم — نعيد بعد ${e.seconds} ث`;
-        upd();
-      }
-    },
-  });
+  const onEvent = (e) => {
+    if (e.type === 'usage') showUsage();
+    if (e.type === 'model') {
+      fillModels();
+      if (e.why === 'daily') note = `\nخلصت حصة اليوم لموديل، انتقلنا لـ ${e.model}`;
+      else if (e.why === 'busy') note = `\n${e.model} (الموديل الأول مزحوم)`;
+      upd();
+    }
+    if (e.type === 'provider') { note = `\n🔁 خلصت حصة اليوم، كمّلنا بـ ${e.provider}`; fillModels(); upd(); }
+    if (e.type === 'wait') {
+      note = e.why === 'minute' ? `\n⏳ وصلنا حد الطلبات بالدقيقة — نكمل بعد ${e.seconds} ث (ما يضيع شي)`
+        : e.why === 'network' ? `\n📶 انقطع الاتصال — نعيد بعد ${e.seconds} ث` : `\n⏳ الموديل مزحوم — نعيد بعد ${e.seconds} ث`;
+      upd();
+    }
+  };
+  // المزوّد المختار أولاً، والثاني (لو فيه مفتاح) احتياط
+  const mk = {
+    gemini: () => gKey && new Gemini(gKey, { preferred: settings.model || undefined, onEvent }),
+    groq: () => qKey && new Groq(qKey, { preferred: settings.groqModel || undefined, onEvent }),
+  };
+  const order = isGroq() ? ['groq', 'gemini'] : ['gemini', 'groq'];
+  const gem = new Providers(order.map((k) => mk[k]()).filter(Boolean), onEvent);
   const signal = { get aborted() { return state.stop.aborted || !!state.halt; } };
   const glossary = () => seriesData().names.filter((e) => e.o && e.t);
 
@@ -529,10 +556,13 @@ async function translateAll(only, { single = false } = {}) {
         if (rs.some(([, r]) => r === null)) missing.push(p);
         else finish(p, rs.flatMap(([, r]) => r));
       }
-      for (const p of pages) if (p.tr) { await render(p); done++; upd(); renderPage(p); }
+      // صفحة رجعت فاضية وهي مع صفحات ثانية: نتأكد منها لحالها (أحياناً الموديل يفوّت صفحة في الطلب المشترك)
+      const empties = pages.length > 1 ? pages.filter((p) => p.tr && !p.tr.length) : [];
+      for (const p of pages) if (p.tr && !empties.includes(p)) { await render(p); done++; upd(); renderPage(p); }
+      for (const p of empties) { p.tr = null; ok--; await runBatch([p]); }
       if (missing.length) {
         if (pages.length > 1) for (const p of missing) await runBatch([p]);
-        else { fail(missing[0], 'Gemini ما رجّع هالصفحة'); done++; upd(); renderPage(missing[0]); }
+        else { fail(missing[0], 'الموديل ما رجّع هالصفحة'); done++; upd(); renderPage(missing[0]); }
       }
     } catch (e) {
       if (e instanceof FatalError || e instanceof QuotaError || e instanceof StopError) {
@@ -558,7 +588,7 @@ async function translateAll(only, { single = false } = {}) {
       let cur = [], n = 0;
       for (const p of todo) {
         p.parts = p.parts || await pageParts(p.data, p.mime);
-        if (cur.length && n + p.parts.length > BATCH()) { batches.push(cur); cur = []; n = 0; }
+        if (cur.length && n + p.parts.length > Math.min(BATCH(), gem.maxImages)) { batches.push(cur); cur = []; n = 0; }
         cur.push(p);
         n += p.parts.length;
       }
@@ -580,7 +610,7 @@ async function translateAll(only, { single = false } = {}) {
   } catch (e) {
     const saved = state.pages.filter((p) => p.tr).length;
     if (e instanceof QuotaError) {
-      status(`خلصت الحصة المجانية اليومية لـ Gemini 😴\nترجمت ${saved} من ${state.pages.length} صفحة وكلها محفوظة.\nالحصة تتجدد كل يوم — ارجع بكرة وافتح الموقع، تلقى الفصل مكانه واضغط «كمّل».`, 'warn');
+      status(`خلصت الحصة المجانية اليومية لـ ${gem.clients.map((c) => c.name).join(' و ')} 😴\nترجمت ${saved} من ${state.pages.length} صفحة وكلها محفوظة.\nالحصة تتجدد كل يوم — ارجع بكرة وافتح الموقع، تلقى الفصل مكانه واضغط «كمّل».`, 'warn');
     } else {
       status(e.message, 'err');
       if (e instanceof FatalError) { $('keyHelp').open = true; $('setup').scrollIntoView({ behavior: 'smooth' }); }
