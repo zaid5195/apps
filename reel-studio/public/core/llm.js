@@ -20,7 +20,7 @@ export function chatUrl(baseUrl) {
  * Stream a chat completion. Calls onDelta(visibleDelta, visibleSoFar) with <think> stripped.
  * Resolves with the final visible text.
  */
-export async function chatStream({ baseUrl, apiKey, model, messages, temperature = 0.7, maxTokens, signal, onDelta, fetchImpl = fetch, retries = 2, log = () => {} }) {
+export async function chatStream({ baseUrl, apiKey, model, messages, temperature = 0.7, maxTokens, signal, onDelta, fetchImpl = fetch, retries = 3, log = () => {} }) {
   const url = chatUrl(baseUrl);
   const body = { model: model || 'auto', messages, temperature, stream: true };
   if (maxTokens) body.max_tokens = maxTokens;
@@ -41,6 +41,8 @@ export async function chatStream({ baseUrl, apiKey, model, messages, temperature
         const txt = await res.text().catch(() => '');
         const err = new Error(`LLM HTTP ${res.status}: ${txt.slice(0, 300)}`);
         err.status = res.status;
+        const ra = +res.headers.get('retry-after');
+        if (ra > 0) err.retryAfter = Math.min(30, ra);
         throw err;
       }
       const ctype = res.headers.get('content-type') || '';
@@ -82,8 +84,10 @@ export async function chatStream({ baseUrl, apiKey, model, messages, temperature
       const retryable = !e.status || e.status >= 500 || e.status === 429;
       if (attempt < retries && retryable && !shown) {
         attempt++;
-        log(`LLM attempt ${attempt} failed (${e.message}); retrying…`);
-        await new Promise(r => setTimeout(r, 800 * attempt));
+        const busy = isBusy(e);
+        const wait = e.retryAfter ? e.retryAfter * 1000 : busy ? 2000 * 2 ** (attempt - 1) : 800 * attempt; // busy: 2 s, 4 s, 8 s
+        log(busy ? `الموديل مزحوم دابا (HTTP ${e.status}) — نعاود بعد ${Math.round(wait / 1000)} ث (محاولة ${attempt}/${retries})` : `LLM attempt ${attempt} failed (${e.message.slice(0, 120)}); retrying…`);
+        await sleep(wait, signal);
         continue;
       }
       throw e;
@@ -146,3 +150,10 @@ export function modelProblem(err) {
   const sug = m.match(/use\s+(?:the\s+)?(?:model\s+)?(?:models\/)?([a-z0-9][\w.\-]*[a-z0-9])/i);
   return { suggested: sug ? sug[1] : null };
 }
+
+/** Temporary overload / server errors worth retrying or routing to another model. */
+export const isBusy = e => [429, 500, 502, 503, 504, 529].includes(e?.status) || /overloaded|high demand|UNAVAILABLE|try again later/i.test(String(e?.message || ''));
+const sleep = (ms, signal) => new Promise((res, rej) => {
+  const t = setTimeout(res, ms);
+  signal?.addEventListener('abort', () => { clearTimeout(t); rej(new DOMException('Cancelled', 'AbortError')); }, { once: true });
+});

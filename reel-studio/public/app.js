@@ -168,7 +168,7 @@ async function viewProject(id) {
       st.error ? h('div', { class: 'errbox' },
         h('div', { dir: 'auto' }, '⚠️ ' + st.error),
         h('div', { class: 'row', style: 'margin-top:8px' },
-          ['key', 'model', 'network', 'quota'].includes(st.errorCode) ? h('a', { class: 'btn sm', href: '#/settings' }, '⚙ افتح الإعدادات') : null,
+          ['key', 'model', 'network', 'quota', 'busy'].includes(st.errorCode) ? h('a', { class: 'btn sm', href: '#/settings' }, '⚙ افتح الإعدادات') : null,
           st.errorLink ? h('a', { class: 'btn sm primary', href: st.errorLink, target: '_blank', rel: 'noopener' }, st.errorCode === 'key' ? '🔑 هات مفتاح مجاني' : '↗ المساعدة') : null,
           !running() ? h('button', { class: 'sm', onclick: () => guard(() => be.rerun(id, s)) }, '↻ جرّب تاني') : null)) : null,
       body,
