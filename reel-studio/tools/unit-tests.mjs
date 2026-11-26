@@ -98,6 +98,22 @@ t('errors: 429 → quota', friendly(Object.assign(new Error('x'), { status: 429 
 t('errors: fetch failed → network', friendly(new TypeError('Failed to fetch'), { name: 'FreeLLMAPI', local: true }).code === 'network');
 t('errors: provider detection', providerOf('https://generativelanguage.googleapis.com/v1beta/openai').name === 'Gemini' && isLocalUrl('http://127.0.0.1:31415/v1') && !isLocalUrl('https://api.groq.com'));
 
+// base URL mix-ups (the website/key page instead of the API)
+const ef = await import('../public/core/errors.js');
+t('fixBaseUrl: aistudio → Gemini API', ef.fixBaseUrl('https://aistudio.google.com/').url === 'https://generativelanguage.googleapis.com/v1beta/openai');
+t('fixBaseUrl: groq console / openrouter keys page', ef.fixBaseUrl('https://console.groq.com/keys').url === 'https://api.groq.com/openai/v1' && ef.fixBaseUrl('openrouter.ai/keys').url === 'https://openrouter.ai/api/v1');
+t('fixBaseUrl: local FreeLLMAPI untouched', ef.fixBaseUrl('http://127.0.0.1:31415/v1').note === '');
+const { Pipeline } = await import('../public/core/pipeline.js');
+const pl = new Pipeline({});
+const st1 = { llm: { baseUrl: 'https://aistudio.google.com/', apiKey: 'AIzaSyD-abcdefghijklmnopqrstuvwxyz12345', model: 'auto' } };
+pl.checkLlm(st1);
+t('run-time repair of saved settings (aistudio URL)', st1.llm.baseUrl.includes('generativelanguage') && st1.llm.model === 'gemini-2.5-flash');
+const st2 = { llm: { baseUrl: 'AIzaSyD-abcdefghijklmnopqrstuvwxyz12345', apiKey: '', model: 'auto' } };
+pl.checkLlm(st2);
+t('run-time repair: key pasted into Base URL', st2.llm.apiKey.startsWith('AIza') && st2.llm.baseUrl.includes('generativelanguage'));
+let threw = null; try { pl.checkLlm({ llm: { baseUrl: 'https://aistudio.google.com/', apiKey: '' } }); } catch (e) { threw = e; }
+t('still asks for the key when it is missing', threw?.code === 'key' && /Gemini/.test(threw.message));
+
 // icons
 const lib = JSON.parse(readFileSync(new URL('../public/assets/icons/icons.json', import.meta.url)));
 t('icons: licences included', lib.sets.health.license === 'CC0-1.0' && lib.sets.tabler.license === 'MIT');
