@@ -10,7 +10,7 @@ import { resolveStoryboardIcons } from './icons.js';
 import { buildTimeline, videoDuration } from './timeline.js';
 import { mixAudio, encodeWav } from './audio.js';
 import { LANGS, lang as L } from './lang.js';
-import { friendly, providerOf, isLocalUrl, missingKey } from './errors.js';
+import { friendly, providerOf, isLocalUrl, missingKey, fixBaseUrl, providerFromKey, looksLikeKey } from './errors.js';
 
 export const STAGES = ['script', 'voice', 'timing', 'storyboard', 'render'];
 export const LENGTHS = [10, 20, 30, 45, 60];
@@ -234,7 +234,17 @@ export class Pipeline {
   }
 
   /** Fail fast (before any call) when an online LLM has no key. */
-  checkLlm(settings) {
+  checkLlm(settings, log = () => {}) {
+    // Repair settings mistakes in place (for this run): website instead of API URL, key pasted in the URL field…
+    if (looksLikeKey(settings.llm.baseUrl) && !settings.llm.apiKey) { settings.llm.apiKey = settings.llm.baseUrl.trim(); settings.llm.baseUrl = ''; log('المفتاح كان مكتوب في خانة Base URL — استعملناه كمفتاح'); }
+    const byKey = providerFromKey(settings.llm.apiKey);
+    if (byKey && (!settings.llm.baseUrl || isLocalUrl(settings.llm.baseUrl) || !/^https?:\/\//.test(settings.llm.baseUrl))) {
+      log(`المفتاح ده مفتاح ${byKey.name} — استعملنا ${byKey.baseUrl}`);
+      settings.llm.baseUrl = byKey.baseUrl; if (!settings.llm.model || settings.llm.model === 'auto') settings.llm.model = byKey.model;
+    }
+    const fx = fixBaseUrl(settings.llm.baseUrl);
+    if (fx.note) { log(fx.note); settings.llm.baseUrl = fx.url; }
+    if (/generativelanguage/.test(settings.llm.baseUrl) && (!settings.llm.model || settings.llm.model === 'auto')) settings.llm.model = 'gemini-2.5-flash';
     const { baseUrl, apiKey } = settings.llm;
     if (!String(baseUrl || '').trim()) throw missingKey('LLM (Base URL)', '');
     if (!apiKey && !isLocalUrl(baseUrl)) { const pr = providerOf(baseUrl); throw missingKey(pr.name, pr.link); }
@@ -243,7 +253,7 @@ export class Pipeline {
   // ---------------------------------------------------------------- stages
   async stage_script(p, ctx) {
     const { settings } = ctx;
-    this.checkLlm(settings);
+    this.checkLlm(settings, ctx.log);
     const lg = p.lang || 'ar';
     const styleGuide = await this.env.loadStyleGuide(lg);
     ctx.log(`Writing a ${p.length}s ${L(lg).name} script (~${targetWords(p.length, lg)} words) with ${settings.llm.model || 'auto'} @ ${settings.llm.baseUrl}`);
@@ -321,7 +331,7 @@ export class Pipeline {
   async stage_storyboard(p, ctx) {
     if (!p.timing) throw new Error('No timing');
     const { settings } = ctx;
-    this.checkLlm(settings);
+    this.checkLlm(settings, ctx.log);
     const tokens = p.timing.tokens;
     const duration = videoDuration(tokens, p.voice?.duration);
     ctx.log(`Storyboarding ${tokens.length} words / ${duration.toFixed(1)} s`);

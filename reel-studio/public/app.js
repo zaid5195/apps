@@ -2,7 +2,7 @@
 import { STAGES, LENGTHS } from './core/pipeline.js';
 import { LLM_PRESETS } from './core/defaults.js';
 import { LANGS } from './core/lang.js';
-import { providerOf, isLocalUrl } from './core/errors.js';
+import { providerOf, isLocalUrl, fixBaseUrl, providerFromKey, looksLikeKey } from './core/errors.js';
 import { createRenderer, loadFonts } from './render/engine.js';
 
 const STAGE_AR = { script: 'السكريبت', voice: 'الصوت', timing: 'التوقيت', storyboard: 'الستوري بورد', render: 'الرندر' };
@@ -399,7 +399,18 @@ async function viewSettings() {
       if (parts.length === 2) patch[parts[0]][parts[1]] = v; else patch[parts[0]] = v;
     }
     patch.eleven.voiceId = voiceSel.value;
-    s = await guard(() => be.saveSettings(patch), quiet ? null : 'اتحفظ ✓');
+    // Help with the usual mix-ups: key pasted into Base URL, website link instead of the API URL, key of another provider.
+    const notes = [];
+    if (!f['llm.baseUrl'].disabled) {
+      if (looksLikeKey(patch.llm.baseUrl)) { if (!patch.llm.apiKey || patch.llm.apiKey.includes('••••')) patch.llm.apiKey = patch.llm.baseUrl.trim(); patch.llm.baseUrl = ''; notes.push('المفتاح اتنقل لخانة المفتاح'); }
+      const byKey = !String(patch.llm.apiKey || '').includes('••••') && providerFromKey(patch.llm.apiKey);
+      if (byKey && (!patch.llm.baseUrl || isLocalUrl(patch.llm.baseUrl) || providerOf(patch.llm.baseUrl).name !== byKey.name)) { patch.llm.baseUrl = byKey.baseUrl; patch.llm.model = byKey.model; notes.push(`المفتاح ده ${byKey.name} — ضبطنا الرابط والموديل`); }
+      const fx = fixBaseUrl(patch.llm.baseUrl);
+      if (fx.note) { patch.llm.baseUrl = fx.url; notes.push('Base URL اتصلّح'); }
+      if (/generativelanguage/.test(patch.llm.baseUrl) && (!patch.llm.model || patch.llm.model === 'auto')) patch.llm.model = 'gemini-2.5-flash';
+      f['llm.baseUrl'].value = patch.llm.baseUrl; f['llm.model'].value = patch.llm.model; updHint();
+    }
+    s = await guard(() => be.saveSettings(patch), quiet ? null : 'اتحفظ ✓' + (notes.length ? ' — ' + notes.join('، ') : ''));
     for (const [path, el] of Object.entries(f)) if (el.type === 'password') el.value = path.split('.').reduce((a, k) => a?.[k], s) || '';
   }
 
