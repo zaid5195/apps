@@ -199,6 +199,12 @@ const iconsDir = join(root, 'icons');
 if (existsSync(iconsDir)) cpSync(iconsDir, join(out, 'icons'), { recursive: true });
 const adminDir = join(root, 'admin');
 if (existsSync(adminDir)) cpSync(adminDir, join(out, 'admin'), { recursive: true });
+// Reel Studio (phone / browser-only mode): static copy of reel-studio/public + its style guide.
+const reelDir = join(root, '..', 'reel-studio');
+if (existsSync(join(reelDir, 'public'))) {
+  cpSync(join(reelDir, 'public'), join(out, 'reel-studio'), { recursive: true });
+  cpSync(join(reelDir, 'references'), join(out, 'reel-studio', 'references'), { recursive: true });
+}
 const translateDir = join(root, 'translate');
 if (existsSync(translateDir)) cpSync(translateDir, join(out, 'translate'), { recursive: true });
 const cfgDir = join(root, 'config');
