@@ -1,6 +1,6 @@
 // The 5-stage pipeline (script → voice → timing → storyboard → render).
 // Runs unchanged on the Node server and inside the browser (phone mode); `env` supplies I/O.
-import { chatStream, extractJson, listModels, modelProblem } from './llm.js';
+import { chatStream, extractJson, listModels, modelProblem, isBusy } from './llm.js';
 import { scriptMessages, parseScript, ensureSeriesQuestion, checkLength, targetWords } from './script.js';
 import { tokenize } from './text.js';
 import { alignTokens } from './align.js';
@@ -238,8 +238,20 @@ export class Pipeline {
    * switch to the model it suggests — or the best one from /models — save it, and retry once.
    */
   async llm(settings, ctx, { messages, temperature }) {
-    const call = () => chatStream({ ...settings.llm, messages, temperature, signal: ctx.signal, onDelta: ctx.llm, fetchImpl: this.env.fetch, log: ctx.log });
+    const call = (model = settings.llm.model) => chatStream({ ...settings.llm, model, messages, temperature, signal: ctx.signal, onDelta: ctx.llm, fetchImpl: this.env.fetch, log: ctx.log });
     try { return await call(); } catch (e) {
+      if (isBusy(e) && !ctx.signal?.aborted && e.status !== 429) {
+        // Overload is per model: try up to two other models for this call only (settings unchanged).
+        let ids = [];
+        try { ids = await listModels({ ...settings.llm, fetchImpl: this.env.fetch, signal: ctx.signal }); } catch {}
+        const family = m => (String(m).match(/gemini|llama|gpt|claude|mistral|qwen|deepseek/i) || [''])[0].toLowerCase();
+        const alts = ids.filter(id => id !== settings.llm.model && family(id) === family(settings.llm.model) && !/embed|tts|audio|image|vision|imagen|veo/i.test(id)).slice(0, 2);
+        for (const alt of alts) {
+          ctx.log(`«${settings.llm.model}» مزحوم — نجرّب «${alt}» المرة دي بس`);
+          try { return await call(alt); } catch (e2) { if (!isBusy(e2) || ctx.signal?.aborted) throw e2; }
+        }
+        throw e;
+      }
       const mp = modelProblem(e);
       if (!mp || ctx.signal?.aborted) throw e;
       const old = settings.llm.model;

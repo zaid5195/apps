@@ -32,6 +32,9 @@ export function friendly(e, { name, link = '', local = false, host = '' } = {}) 
   if (status === 401 || status === 403 || (status === 400 && authish)) {
     return new FriendlyError(`مفتاح ${name} ناقص أو غلط. افتح الإعدادات وحط المفتاح الصحيح${link ? ' (تقدر تاخد واحد مجاني من الرابط)' : ''}.`, { code: 'key', link, raw });
   }
+  if ([500, 502, 503, 504, 529].includes(status) || /high demand|overloaded|UNAVAILABLE/i.test(raw)) {
+    return new FriendlyError(`${name} مزحوم دابا (ضغط كبير على السيرفرات ديالهم). هادشي مؤقت: جرّب بعد دقيقة، ولا بدّل الموديل من الإعدادات (زر ⟳ حدا Model).`, { code: 'busy', link: '', raw });
+  }
   if (status === 429 || /quota|rate.?limit|RESOURCE_EXHAUSTED|too many/i.test(raw)) {
     return new FriendlyError(`وصلت للحد المسموح في ${name} (quota). استنى دقيقة وعاود، أو غيّر الموديل/المزوّد من الإعدادات.`, { code: 'quota', link, raw });
   }
