@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reel render</title>
+<style>html,body{margin:0;background:#0C1014;overflow:hidden}canvas{display:block}</style>
+</head>
+<body>
+<canvas id="c" width="1080" height="1920"></canvas>
+<script type="module">
+import { createRenderer, loadFonts } from './render/engine.js';
+const canvas = document.getElementById('c');
+let renderer = null;
+// window.loadProject(data, {font}) → {duration, fps, frames}; then window.drawFrame(t) draws frame t.
+window.loadProject = async (data, opts = {}) => {
+  if (opts.width) { canvas.width = opts.width; canvas.height = Math.round(opts.width * 16 / 9); }
+  await loadFonts(document, './assets/fonts/', opts.font);
+  renderer = createRenderer(canvas, data);
+  renderer.drawFrame(0);
+  return { duration: renderer.duration, fps: renderer.fps, frames: Math.ceil(renderer.duration * renderer.fps) };
+};
+window.drawFrame = t => { renderer.drawFrame(t); return true; };
+window.grab = (t, q = 0.95) => { renderer.drawFrame(t); return canvas.toDataURL('image/jpeg', q); };
+const id = new URLSearchParams(location.search).get('project');
+if (id) {
+  const r = await fetch(`/api/projects/${id}/render-data`);
+  const j = await r.json();
+  await window.loadProject(j.data, { font: j.font });
+  const t = +(new URLSearchParams(location.search).get('t') || 0);
+  window.drawFrame(t);
+}
+window.ready = true;
+</script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+{
+  "name": "reel-studio",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Reel Studio v1 — topic to vertical Arabic science-explainer reel",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "setup": "npm install && node tools/install-browser.mjs",
+    "start": "node server.mjs",
+    "mock": "node tools/mock-apis.mjs",
+    "e2e": "node tools/e2e.mjs",
+    "test": "node tools/unit-tests.mjs",
+    "sheets": "node tools/template-sheets.mjs",
+    "icons": "node tools/build-icons.mjs",
+    "build:web": "node tools/build-web.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.49.0"
+  },
+  "optionalDependencies": {
+    "ffmpeg-static": "^5.2.0"
+  },
+  "devDependencies": {
+    "@fontsource/ibm-plex-sans-arabic": "^5.3.0",
+    "@tabler/icons": "^3.53.0",
+    "healthicons": "^3.1.0",
+    "mp4-muxer": "^5.2.2"
+  }
+}
