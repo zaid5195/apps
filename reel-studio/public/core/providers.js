@@ -1,4 +1,6 @@
 // ElevenLabs (TTS with timestamps, voices, Scribe STT) and Deepgram (STT) clients.
+import { missingKey } from './errors.js';
+const EL = 'https://elevenlabs.io/app/developers/', DG = 'https://console.deepgram.com/';
 
 const b64ToBytes = b64 => {
   if (typeof Buffer !== 'undefined') return new Uint8Array(Buffer.from(b64, 'base64'));
@@ -18,7 +20,7 @@ async function httpError(res, what) {
 }
 
 export async function elevenVoices({ apiKey, baseUrl = 'https://api.elevenlabs.io', fetchImpl = fetch, signal }) {
-  if (!apiKey) throw new Error('ElevenLabs API key is missing (Settings)');
+  if (!apiKey) throw missingKey('ElevenLabs', EL);
   const res = await fetchImpl(`${trimBase(baseUrl)}/v1/voices`, { headers: { 'xi-api-key': apiKey }, signal });
   if (!res.ok) throw await httpError(res, 'ElevenLabs voices');
   const j = await res.json();
@@ -26,8 +28,8 @@ export async function elevenVoices({ apiKey, baseUrl = 'https://api.elevenlabs.i
 }
 
 export async function elevenTTS({ apiKey, voiceId, text, modelId = 'eleven_multilingual_v2', languageCode, baseUrl = 'https://api.elevenlabs.io', fetchImpl = fetch, signal }) {
-  if (!apiKey) throw new Error('ElevenLabs API key is missing (Settings)');
-  if (!voiceId) throw new Error('No ElevenLabs voice selected (Settings → load voices)');
+  if (!apiKey) throw missingKey('ElevenLabs', EL);
+  if (!voiceId) throw Object.assign(new Error('ما اخترتش صوت. افتح الإعدادات ← «تحميل الأصوات» واختار صوت.'), { friendly: true, code: 'key' });
   const body = { text, model_id: modelId, voice_settings: { stability: 0.45, similarity_boost: 0.8, style: 0.15, use_speaker_boost: true } };
   if (languageCode) body.language_code = languageCode;
   const url = `${trimBase(baseUrl)}/v1/text-to-speech/${encodeURIComponent(voiceId)}/with-timestamps?output_format=mp3_44100_128`;
@@ -54,7 +56,7 @@ export function alignmentToWords(al) {
 }
 
 export async function deepgramListen({ apiKey, audio, mime = 'audio/mpeg', model = 'nova-3', language = 'ar', baseUrl = 'https://api.deepgram.com', fetchImpl = fetch, signal }) {
-  if (!apiKey) throw new Error('Deepgram API key is missing (Settings)');
+  if (!apiKey) throw missingKey('Deepgram', DG);
   const q = new URLSearchParams({ model, language, punctuate: 'true', smart_format: 'false' });
   const res = await fetchImpl(`${trimBase(baseUrl)}/v1/listen?${q}`, { method: 'POST', headers: { authorization: `Token ${apiKey}`, 'content-type': mime }, body: audio, signal });
   if (!res.ok) throw await httpError(res, 'Deepgram');
@@ -66,7 +68,7 @@ export async function deepgramListen({ apiKey, audio, mime = 'audio/mpeg', model
 
 /** ElevenLabs Scribe speech-to-text (word timestamps). Works straight from a phone browser. */
 export async function elevenSTT({ apiKey, audio, mime = 'audio/mpeg', fileName = 'voice.mp3', languageCode = 'ara', baseUrl = 'https://api.elevenlabs.io', fetchImpl = fetch, signal }) {
-  if (!apiKey) throw new Error('ElevenLabs API key is missing (Settings)');
+  if (!apiKey) throw missingKey('ElevenLabs', EL);
   const form = new FormData();
   form.append('model_id', 'scribe_v1');
   form.append('language_code', languageCode);

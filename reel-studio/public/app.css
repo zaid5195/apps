@@ -85,7 +85,8 @@ button.sm { min-height: 34px; padding: 6px 12px; font-size: 13px; border-radius:
 .badge.done { background: rgba(54,201,143,.15); color: var(--ok); } .badge.error { background: rgba(255,107,107,.15); color: var(--err); }
 .stage-head .spacer { flex: 1; }
 .log { background: var(--bg); border-radius: 10px; padding: 8px 10px; font-size: 12px; max-height: 160px; overflow: auto; color: var(--sec); direction: rtl; white-space: pre-wrap; word-break: break-word; }
-.log div { border-bottom: 1px dashed rgba(255,255,255,.04); padding: 2px 0; }
+.errbox { background: rgba(255,107,107,.08); border: 1px solid rgba(255,107,107,.35); border-radius: 12px; padding: 10px 12px; margin: 6px 0 10px; color: var(--text); font-size: 14px; }
+.log div { unicode-bidi: plaintext; text-align: start; border-bottom: 1px dashed rgba(255,255,255,.04); padding: 2px 0; }
 .err { color: var(--err); }
 .stream { background: var(--bg); border-radius: 10px; padding: 10px; white-space: pre-wrap; font-size: 14px; max-height: 260px; overflow: auto; border: 1px solid rgba(39,184,199,.25); }
 .bar { height: 8px; background: var(--bg); border-radius: 99px; overflow: hidden; } .bar > i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .2s; }

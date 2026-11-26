@@ -89,6 +89,15 @@ const esTok = tokenize('Tu corazón late ¿Sabes por qué? Porque tiene electric
 t('es: repair finds the question scene', repairStoryboard({ scenes: [] }, esTok, { lang: 'es' }).storyboard.scenes.some(s => s.type === 'question' && s.at === 3));
 t('es: parse Spanish labels', parseScript('TÍTULO: Hola\nGUION:\nLínea uno\nFUENTES:\n- NASA').title === 'Hola');
 
+// friendly errors
+import('../public/core/errors.js').then(() => {});
+const { friendly, providerOf, isLocalUrl } = await import('../public/core/errors.js');
+const fe = friendly(Object.assign(new Error('LLM HTTP 400: [{"error":{"code":400,"message":"Missing or invalid Authorization header."}}]'), { status: 400 }), { name: 'Gemini', link: 'https://aistudio.google.com/apikey' });
+t('errors: Gemini 400 auth → key error with link', fe.code === 'key' && fe.link.includes('aistudio') && /مفتاح Gemini/.test(fe.message));
+t('errors: 429 → quota', friendly(Object.assign(new Error('x'), { status: 429 }), { name: 'Groq' }).code === 'quota');
+t('errors: fetch failed → network', friendly(new TypeError('Failed to fetch'), { name: 'FreeLLMAPI', local: true }).code === 'network');
+t('errors: provider detection', providerOf('https://generativelanguage.googleapis.com/v1beta/openai').name === 'Gemini' && isLocalUrl('http://127.0.0.1:31415/v1') && !isLocalUrl('https://api.groq.com'));
+
 // icons
 const lib = JSON.parse(readFileSync(new URL('../public/assets/icons/icons.json', import.meta.url)));
 t('icons: licences included', lib.sets.health.license === 'CC0-1.0' && lib.sets.tabler.license === 'MIT');
