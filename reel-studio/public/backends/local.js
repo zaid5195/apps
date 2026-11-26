@@ -3,6 +3,7 @@
 import { Pipeline, STAGES, renderData } from '../core/pipeline.js';
 import { DEFAULT_SETTINGS, SECRET_PATHS, deepMerge, getPath, setPath, mask } from '../core/defaults.js';
 import { elevenVoices } from '../core/providers.js';
+import { listModels } from '../core/llm.js';
 import { decodeWav } from '../core/audio.js';
 import { lang } from '../core/lang.js';
 import { encodeReel, decodeAudioBrowser } from './encode.js';
@@ -10,7 +11,7 @@ import { encodeReel, decodeAudioBrowser } from './encode.js';
 const DB = 'reel-studio', VER = 1;
 // A phone browser can't reach a FreeLLMAPI on another machine, and Deepgram may refuse browser (CORS) calls:
 // default to providers that work straight from the device. Everything stays editable in Settings.
-const PHONE_DEFAULTS = { llm: { baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-2.5-flash' }, stt: 'elevenlabs' };
+const PHONE_DEFAULTS = { llm: { baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-flash-latest' }, stt: 'elevenlabs' };
 let dbp;
 function db() {
   return (dbp ??= new Promise((res, rej) => {
@@ -59,6 +60,7 @@ export class LocalBackend {
       loadStyleGuide: lg => fetch(new URL('../references/' + lang(lg).styleFile, import.meta.url)).then(r => { if (!r.ok) throw new Error('style guide missing'); return r.text(); }),
       loadIcons: () => (this.icons ??= fetch(new URL('../assets/icons/icons.json', import.meta.url)).then(r => r.json())),
       decodeAudio: bytes => decodeAudioBrowser(bytes),
+      updateSettings: patch => this.saveSettings(patch),
       emit: (id, ev) => { for (const cb of this.subs.get(id) || []) cb(ev); },
       render: async ({ project, data, wav, signal, onProgress, onFrame, log }) => {
         const mix = decodeWav(wav);
@@ -102,6 +104,7 @@ export class LocalBackend {
     if (!file) await idb.del('kv', 'font'); else await idb.put('kv', 'font', { name: file.name, blob: file });
     return this.getSettings();
   }
+  async models() { const s = await this._settings(); return { models: await listModels({ ...s.llm }) }; }
   async voices() { const s = await this._settings(); return { voices: await elevenVoices({ ...s.eleven }) }; }
   async listProjects() {
     return { projects: (await store.list()).map(p => ({ id: p.id, topic: p.topic, lang: p.lang || 'ar', title: p.title, length: p.length, updatedAt: p.updatedAt, stages: Object.fromEntries(STAGES.map(s => [s, p.stages[s].status])), render: p.render, running: this.pipeline.isRunning(p.id) })) };

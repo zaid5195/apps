@@ -1,6 +1,6 @@
 // The 5-stage pipeline (script → voice → timing → storyboard → render).
 // Runs unchanged on the Node server and inside the browser (phone mode); `env` supplies I/O.
-import { chatStream, extractJson } from './llm.js';
+import { chatStream, extractJson, listModels, modelProblem } from './llm.js';
 import { scriptMessages, parseScript, ensureSeriesQuestion, checkLength, targetWords } from './script.js';
 import { tokenize } from './text.js';
 import { alignTokens } from './align.js';
@@ -233,6 +233,29 @@ export class Pipeline {
     return { name: 'Render' };
   }
 
+  /**
+   * One LLM call. If the provider says the model is gone/unknown (e.g. Gemini retired a model),
+   * switch to the model it suggests — or the best one from /models — save it, and retry once.
+   */
+  async llm(settings, ctx, { messages, temperature }) {
+    const call = () => chatStream({ ...settings.llm, messages, temperature, signal: ctx.signal, onDelta: ctx.llm, fetchImpl: this.env.fetch, log: ctx.log });
+    try { return await call(); } catch (e) {
+      const mp = modelProblem(e);
+      if (!mp || ctx.signal?.aborted) throw e;
+      const old = settings.llm.model;
+      let next = mp.suggested;
+      let ids = [];
+      try { ids = await listModels({ ...settings.llm, fetchImpl: this.env.fetch, signal: ctx.signal }); } catch (le) { ctx.log(`Could not list models: ${le.message}`); }
+      if (next && ids.length && !ids.includes(next)) next = null;
+      if (!next) next = ids.find(id => id !== old && !/embed|tts|audio|image|vision/i.test(id));
+      if (!next || next === old) throw e;
+      ctx.log(`الموديل «${old}» مش متاح — بدّلناه لـ «${next}»${this.env.updateSettings ? ' وحفظناه في الإعدادات' : ''}`);
+      settings.llm.model = next;
+      try { await this.env.updateSettings?.({ llm: { model: next } }); } catch {}
+      return await call();
+    }
+  }
+
   /** Fail fast (before any call) when an online LLM has no key. */
   checkLlm(settings, log = () => {}) {
     // Repair settings mistakes in place (for this run): website instead of API URL, key pasted in the URL field…
@@ -244,7 +267,7 @@ export class Pipeline {
     }
     const fx = fixBaseUrl(settings.llm.baseUrl);
     if (fx.note) { log(fx.note); settings.llm.baseUrl = fx.url; }
-    if (/generativelanguage/.test(settings.llm.baseUrl) && (!settings.llm.model || settings.llm.model === 'auto')) settings.llm.model = 'gemini-2.5-flash';
+    if (/generativelanguage/.test(settings.llm.baseUrl) && (!settings.llm.model || settings.llm.model === 'auto')) settings.llm.model = 'gemini-flash-latest';
     const { baseUrl, apiKey } = settings.llm;
     if (!String(baseUrl || '').trim()) throw missingKey('LLM (Base URL)', '');
     if (!apiKey && !isLocalUrl(baseUrl)) { const pr = providerOf(baseUrl); throw missingKey(pr.name, pr.link); }
@@ -260,7 +283,7 @@ export class Pipeline {
     let messages = scriptMessages({ topic: p.topic, seconds: p.length, styleGuide, notes: p.notes, lang: lg });
     let parsed, len, raw;
     for (let attempt = 0; attempt < 2; attempt++) {
-      raw = await chatStream({ ...settings.llm, messages, temperature: settings.llm.temperature ?? 0.8, signal: ctx.signal, onDelta: ctx.llm, fetchImpl: this.env.fetch, log: ctx.log });
+      raw = await this.llm(settings, ctx, { messages, temperature: settings.llm.temperature ?? 0.8 });
       parsed = parseScript(raw);
       if (!parsed.script) throw new Error('The model returned no script');
       len = checkLength(parsed.script, p.length, lg);
@@ -336,7 +359,7 @@ export class Pipeline {
     const duration = videoDuration(tokens, p.voice?.duration);
     ctx.log(`Storyboarding ${tokens.length} words / ${duration.toFixed(1)} s`);
     const ask = async (messages, label) => {
-      const raw = await chatStream({ ...settings.llm, messages, temperature: 0.5, signal: ctx.signal, onDelta: ctx.llm, fetchImpl: this.env.fetch, log: ctx.log });
+      const raw = await this.llm(settings, ctx, { messages, temperature: 0.5 });
       try { return extractJson(raw); } catch (e) { ctx.log(`${label}: ${e.message}`); return null; }
     };
     const lg = p.lang || 'ar';

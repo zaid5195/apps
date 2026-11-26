@@ -110,3 +110,39 @@ export function extractJson(text) {
   }
   throw new Error('No valid JSON object in the model answer');
 }
+
+/** GET {base}/models (OpenAI-compatible). Returns model ids, newest-looking first. */
+export async function listModels({ baseUrl, apiKey, fetchImpl = fetch, signal }) {
+  const b = String(baseUrl || '').trim().replace(/\/+$/, '').replace(/\/chat\/completions$/, '');
+  const headers = apiKey ? { authorization: `Bearer ${apiKey}` } : {};
+  const res = await fetchImpl(b + '/models', { headers, signal });
+  if (!res.ok) { const e = new Error(`models HTTP ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`); e.status = res.status; throw e; }
+  const j = await res.json();
+  const ids = (j.data || j.models || []).map(m => String(m.id || m.name || '').replace(/^models\//, '')).filter(Boolean);
+  return [...new Set(ids)].sort((a, b) => modelScore(b) - modelScore(a) || b.localeCompare(a, 'en', { numeric: true }));
+}
+
+/** Rank chat models: fast general text models first; skip embeddings / audio / image / tts / vision-only. */
+export function modelScore(id) {
+  const s = String(id).toLowerCase();
+  if (/embed|tts|audio|image|imagen|veo|vision|whisper|guard|moderation|aqa|learnlm|live|native|computer-use|robotics|search/.test(s)) return -100;
+  let v = 0;
+  if (/flash/.test(s)) v += 30;
+  if (/latest/.test(s)) v += 25;
+  if (/lite|8b|nano|mini/.test(s)) v -= 12;
+  if (/pro/.test(s)) v += 8;
+  if (/exp|preview/.test(s)) v -= 6;
+  if (/70b|versatile|auto$/.test(s)) v += 20;
+  const ver = s.match(/(\d+(?:\.\d+)?)/);
+  if (ver) v += Math.min(10, parseFloat(ver[1]));
+  return v;
+}
+
+/** Model-gone / model-unknown errors, plus the replacement a provider suggests ("use models/gemini-x-flash"). */
+export function modelProblem(err) {
+  const m = String(err?.message || err || '');
+  const gone = (err?.status === 404 || err?.status === 400) && /model|no longer available|not found|does not exist|not supported|deprecated/i.test(m);
+  if (!gone) return null;
+  const sug = m.match(/use\s+(?:the\s+)?(?:model\s+)?(?:models\/)?([a-z0-9][\w.\-]*[a-z0-9])/i);
+  return { suggested: sug ? sug[1] : null };
+}

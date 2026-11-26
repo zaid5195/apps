@@ -373,6 +373,14 @@ async function viewSettings() {
   };
   const key = (path, link) => h('div', {}, h('div', { class: 'keyrow' }, inp(path, { type: 'password', class: 'ltr', autocomplete: 'off', placeholder: 'الصق المفتاح هنا' })), link ? h('div', { class: 'hint' }, 'هات مفتاح من ', h('a', { href: link, target: '_blank', rel: 'noopener' }, link)) : null);
   const llmKeyHint = h('div', { class: 'hint' });
+  const modelList = h('datalist', { id: 'llm-models' });
+  const loadModels = h('button', { class: 'sm', type: 'button', title: 'تحميل الموديلات المتاحة', onclick: async () => {
+    await save(true);
+    const { models } = await guard(() => be.models());
+    modelList.replaceChildren(...models.map(m => h('option', { value: m })));
+    if (models.length && (!f['llm.model'].value || f['llm.model'].value === 'auto' || !models.includes(f['llm.model'].value))) { f['llm.model'].value = models[0]; await save(true); }
+    toast(`${models.length} موديل — المختار: ${f['llm.model'].value}`);
+  } }, '⟳');
   const updHint = () => {
     const url = f['llm.baseUrl']?.value || s.llm.baseUrl;
     const pr = providerOf(url);
@@ -407,7 +415,7 @@ async function viewSettings() {
       if (byKey && (!patch.llm.baseUrl || isLocalUrl(patch.llm.baseUrl) || providerOf(patch.llm.baseUrl).name !== byKey.name)) { patch.llm.baseUrl = byKey.baseUrl; patch.llm.model = byKey.model; notes.push(`المفتاح ده ${byKey.name} — ضبطنا الرابط والموديل`); }
       const fx = fixBaseUrl(patch.llm.baseUrl);
       if (fx.note) { patch.llm.baseUrl = fx.url; notes.push('Base URL اتصلّح'); }
-      if (/generativelanguage/.test(patch.llm.baseUrl) && (!patch.llm.model || patch.llm.model === 'auto')) patch.llm.model = 'gemini-2.5-flash';
+      if (/generativelanguage/.test(patch.llm.baseUrl) && (!patch.llm.model || patch.llm.model === 'auto')) patch.llm.model = 'gemini-flash-latest';
       f['llm.baseUrl'].value = patch.llm.baseUrl; f['llm.model'].value = patch.llm.model; updHint();
     }
     s = await guard(() => be.saveSettings(patch), quiet ? null : 'اتحفظ ✓' + (notes.length ? ' — ' + notes.join('، ') : ''));
@@ -424,7 +432,7 @@ async function viewSettings() {
     h('div', { class: 'card' }, h('h2', {}, '1. الذكاء الاصطناعي (LLM)'),
       h('div', { class: 'hint' }, 'أي API متوافق مع OpenAI. الافتراضي FreeLLMAPI على جهازك.'), presets,
       h('label', {}, 'Base URL'), inp('llm.baseUrl', { class: 'ltr' }),
-      h('div', { class: 'grid2' }, h('div', {}, h('label', {}, 'Model'), inp('llm.model', { class: 'ltr' })), h('div', {}, h('label', {}, 'Temperature'), inp('llm.temperature', { type: 'number', step: '0.1', min: 0, max: 2, class: 'ltr' }))),
+      h('div', { class: 'grid2' }, h('div', {}, h('label', {}, 'Model'), h('div', { class: 'keyrow' }, inp('llm.model', { class: 'ltr', list: 'llm-models' }), loadModels), modelList), h('div', {}, h('label', {}, 'Temperature'), inp('llm.temperature', { type: 'number', step: '0.1', min: 0, max: 2, class: 'ltr' }))),
       h('label', {}, 'API key (مطلوب لـ Gemini / Groq / OpenRouter — اختياري لـ FreeLLMAPI)'), key('llm.apiKey'), llmKeyHint,
       h('label', { class: 'row', style: 'gap:8px' }, h('input', { type: 'checkbox', checked: selfReview, onchange: e => (selfReview = e.target.checked) }), 'مراجعة ذاتية للستوري بورد (تمريرة تانية تحسّن الاختيارات)')),
     h('div', { class: 'card' }, h('h2', {}, '2. الصوت — ElevenLabs'),
