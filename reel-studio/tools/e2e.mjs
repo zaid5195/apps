@@ -46,7 +46,7 @@ try {
   ok(health.ok && health.ffmpeg, `server up · ffmpeg ${health.ffmpeg} · browser ${health.browser}`);
 
   // settings: keys are saved and only come back masked
-  const s = await api('/api/settings', { method: 'PUT', body: { llm: { apiKey: 'sk-llm-secret-1234' }, eleven: { apiKey: 'xi-secret-abcd', voiceId: 'mock-voice-eg' }, deepgram: { apiKey: 'dg-secret-wxyz' }, approvals: { script: 'wait' } } });
+  const s = await api('/api/settings', { method: 'PUT', body: { llm: { apiKey: 'sk-llm-secret-1234', model: 'retired-model' }, eleven: { apiKey: 'xi-secret-abcd', voiceId: 'mock-voice-eg' }, deepgram: { apiKey: 'dg-secret-wxyz' }, approvals: { script: 'wait' } } });
   ok(s.llm.apiKey === '••••1234' && s.eleven.apiKey === '••••abcd' && !JSON.stringify(s).includes('secret'), 'keys masked to last 4 chars');
   const s2 = await api('/api/settings', { method: 'PUT', body: { eleven: { apiKey: '••••abcd' } } });
   ok(s2.has.eleven, 'masked key round-trip keeps the stored key');
@@ -84,6 +84,9 @@ try {
   ok(p.stages.script.status === 'review', `script waits for approval · "${p.script?.title}" · ${p.script?.words} words (target ${p.script?.target})`);
   ok(LANG === 'es' ? /¿Sabes por qué\?/.test(p.script.text) : /عارف ليه؟/.test(p.script.text), `script contains the series question (${LANG})`);
   ok(!/<think>|think>/i.test(p.script.text + p.script.title), '<think> stripped');
+  ok((await api('/api/settings')).llm.model === 'mock-flash-latest' && p.stages.script.log.some(l => /mock-flash-latest/.test(l.msg)), 'retired model → switched to the suggested one and saved');
+  const ml = await api('/api/models');
+  ok(ml.models[0] === 'mock-flash-latest', `load models: ${ml.models.join(', ')}`);
   ok(p.script.sources.length >= 1, `sources: ${p.script.sources.length}`);
   ok(events.some(e => e.type === 'llm') && events.some(e => e.type === 'state'), 'SSE: state + streamed LLM text');
 

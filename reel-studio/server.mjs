@@ -10,6 +10,7 @@ import { decodeAudio, ffmpegPath } from './lib/media.mjs';
 import { renderVideo, getBrowser, getBrowserKind, closeBrowser } from './lib/render-node.mjs';
 import { Pipeline, STAGES, renderData } from './public/core/pipeline.js';
 import { elevenVoices } from './public/core/providers.js';
+import { listModels } from './public/core/llm.js';
 import { licenseSummary } from './public/core/icons.js';
 import { lang } from './public/core/lang.js';
 
@@ -54,6 +55,7 @@ const pipeline = new Pipeline({
   getSettings: async () => settings.get(),
   loadStyleGuide: lg => readFile(join(ROOT, 'references', lang(lg).styleFile), 'utf8'),
   loadIcons,
+  updateSettings: async patch => settings.update(patch),
   decodeAudio: bytes => decodeAudio(bytes),
   emit,
   async render({ project, data, wav, settings: s, signal, onProgress, onFrame, log, emit: send }) {
@@ -135,6 +137,10 @@ async function api(req, res, url) {
   if (parts[0] === 'voices' && m === 'GET') {
     const s = settings.get();
     return send(res, 200, { voices: await elevenVoices({ ...s.eleven }) });
+  }
+  if (parts[0] === 'models' && m === 'GET') {
+    const s = settings.get();
+    return send(res, 200, { models: await listModels({ ...s.llm }) });
   }
   if (parts[0] === 'fonts' && m === 'GET') return send(res, 200, { custom: await customFont(), folder: settings.get().fontFolder });
   if (parts[0] === 'icons' && m === 'GET') return send(res, 200, { sets: licenseSummary(await loadIcons()) });

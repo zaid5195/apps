@@ -16,7 +16,7 @@ export const SECRET_PATHS = [['llm', 'apiKey'], ['eleven', 'apiKey'], ['deepgram
 /** One-tap presets for OpenAI-compatible providers (all work from a phone browser except a local FreeLLMAPI). */
 export const LLM_PRESETS = [
   { id: 'freellmapi', name: 'FreeLLMAPI (local)', baseUrl: 'http://127.0.0.1:31415/v1', model: 'auto' },
-  { id: 'gemini', name: 'Google Gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-2.5-flash' },
+  { id: 'gemini', name: 'Google Gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-flash-latest' },
   { id: 'groq', name: 'Groq', baseUrl: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' },
   { id: 'openrouter', name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', model: 'openrouter/auto' },
 ];

@@ -53,7 +53,7 @@ export function missingKey(name, link) {
 /** Keys have recognisable prefixes: use them to pick the right provider automatically. */
 export function providerFromKey(key) {
   const k = String(key || '').trim();
-  if (/^AIza[0-9A-Za-z_\-]{20,}$/.test(k)) return { name: 'Gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-2.5-flash' };
+  if (/^AIza[0-9A-Za-z_\-]{20,}$/.test(k)) return { name: 'Gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-flash-latest' };
   if (/^gsk_/.test(k)) return { name: 'Groq', baseUrl: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' };
   if (/^sk-or-/.test(k)) return { name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', model: 'openrouter/auto' };
   return null;

@@ -17,6 +17,7 @@ export class RemoteBackend {
   getSettings() { return req('/api/settings'); }
   saveSettings(patch) { return req('/api/settings', { method: 'PUT', body: patch }); }
   voices() { return req('/api/voices'); }
+  models() { return req('/api/models'); }
   listProjects() { return req('/api/projects'); }
   createProject(b) { return req('/api/projects', { method: 'POST', body: b }); }
   getProject(id) { return req(`/api/projects/${id}`); }

@@ -115,6 +115,7 @@ function reviewAnswer(user) {
 }
 function chat(req, res, body) {
   stats.chat++;
+  if (body.model === 'retired-model') return json(res, 404, [{ error: { code: 404, message: 'This model models/retired-model is no longer available to new users. Please update your code to use models/mock-flash-latest for the latest features and improvements.', status: 'NOT_FOUND' } }]);
   if (req.headers.authorization === 'Bearer bad-key') return json(res, 400, [{ error: { code: 400, message: 'Missing or invalid Authorization header.', status: 'INVALID_ARGUMENT' } }]);
   const sys = body.messages.find(m => m.role === 'system')?.content || '';
   const user = [...body.messages].reverse().find(m => m.role === 'user')?.content || '';
@@ -231,7 +232,7 @@ export function startMock(port = PORT) {
     try {
       const raw = await readBody(req);
       if (url.pathname === '/v1/chat/completions' && req.method === 'POST') return chat(req, res, JSON.parse(raw));
-      if (url.pathname === '/v1/models') return json(res, 200, { data: [{ id: 'auto' }] });
+      if (url.pathname === '/v1/models') return json(res, 200, { object: 'list', data: [{ id: 'models/text-embedding-004' }, { id: 'models/mock-flash-latest' }, { id: 'models/mock-pro' }, { id: 'auto' }] });
       if (url.pathname === '/v1/voices') { stats.voices++; return json(res, 200, { voices: [{ voice_id: 'mock-voice-eg', name: 'Mock Egyptian (male)', category: 'premade', labels: { accent: 'egyptian' } }, { voice_id: 'mock-voice-2', name: 'Mock Narrator', category: 'premade', labels: {} }] }); }
       const ttsM = url.pathname.match(/^\/v1\/text-to-speech\/([^/]+)\/with-timestamps$/);
       if (ttsM && req.method === 'POST') return await speak(req, res, JSON.parse(raw));

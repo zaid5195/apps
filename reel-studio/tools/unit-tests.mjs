@@ -107,7 +107,7 @@ const { Pipeline } = await import('../public/core/pipeline.js');
 const pl = new Pipeline({});
 const st1 = { llm: { baseUrl: 'https://aistudio.google.com/', apiKey: 'AIzaSyD-abcdefghijklmnopqrstuvwxyz12345', model: 'auto' } };
 pl.checkLlm(st1);
-t('run-time repair of saved settings (aistudio URL)', st1.llm.baseUrl.includes('generativelanguage') && st1.llm.model === 'gemini-2.5-flash');
+t('run-time repair of saved settings (aistudio URL)', st1.llm.baseUrl.includes('generativelanguage') && st1.llm.model === 'gemini-flash-latest');
 const st2 = { llm: { baseUrl: 'AIzaSyD-abcdefghijklmnopqrstuvwxyz12345', apiKey: '', model: 'auto' } };
 pl.checkLlm(st2);
 t('run-time repair: key pasted into Base URL', st2.llm.apiKey.startsWith('AIza') && st2.llm.baseUrl.includes('generativelanguage'));
