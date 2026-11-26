@@ -115,6 +115,7 @@ function reviewAnswer(user) {
 }
 function chat(req, res, body) {
   stats.chat++;
+  if (req.headers.authorization === 'Bearer bad-key') return json(res, 400, [{ error: { code: 400, message: 'Missing or invalid Authorization header.', status: 'INVALID_ARGUMENT' } }]);
   const sys = body.messages.find(m => m.role === 'system')?.content || '';
   const user = [...body.messages].reverse().find(m => m.role === 'user')?.content || '';
   let answer;

@@ -2,6 +2,7 @@
 import { STAGES, LENGTHS } from './core/pipeline.js';
 import { LLM_PRESETS } from './core/defaults.js';
 import { LANGS } from './core/lang.js';
+import { providerOf, isLocalUrl } from './core/errors.js';
 import { createRenderer, loadFonts } from './render/engine.js';
 
 const STAGE_AR = { script: 'السكريبت', voice: 'الصوت', timing: 'التوقيت', storyboard: 'الستوري بورد', render: 'الرندر' };
@@ -70,7 +71,11 @@ window.addEventListener('hashchange', route);
 // ---------------------------------------------------------------- home
 async function viewHome() {
   const settings = await be.getSettings();
-  const ready = settings.has?.llm || /127\.0\.0\.1|localhost/.test(settings.llm.baseUrl);
+  const llmPr = providerOf(settings.llm.baseUrl);
+  const missing = [];
+  if (!settings.has?.llm && !isLocalUrl(settings.llm.baseUrl)) missing.push([llmPr.name, llmPr.link]);
+  if (!settings.has?.eleven) missing.push(['ElevenLabs', 'https://elevenlabs.io/app/developers/']);
+  if (be.mode === 'local' && isLocalUrl(settings.llm.baseUrl)) missing.push(['LLM أونلاين (FreeLLMAPI ما يشتغلش من الهاتف)', '']);
   let length = +(localStorage.getItem('reel.length') || 10);
   let voiceSource = 'tts';
   let lang = localStorage.getItem('reel.lang') || 'ar';
@@ -92,7 +97,10 @@ async function viewHome() {
 
   const list = h('div', { class: 'list' }, h('p', { class: 'muted' }, '…'));
   app.append(...clean(
-    !ready ? h('div', { class: 'card', style: 'border-color:var(--warn)' }, '⚠️ لسه ما ضبطتش مفاتيح الـ APIs. ', h('a', { href: '#/settings' }, 'افتح الإعدادات')) : null,
+    missing.length ? h('div', { class: 'card', style: 'border-color:var(--warn)' },
+      h('b', {}, '⚠️ قبل ما تبدأ: ناقص مفاتيح'),
+      h('ul', { class: 'small' }, missing.map(([n, l]) => h('li', {}, n, l ? [' — ', h('a', { href: l, target: '_blank', rel: 'noopener' }, 'هات مفتاح مجاني')] : null))),
+      h('a', { class: 'btn sm primary', href: '#/settings' }, '⚙ افتح الإعدادات')) : null,
     h('div', { class: 'card' },
       h('h1', {}, 'ريل جديد'),
       h('label', {}, 'الموضوع'), topic,
@@ -154,10 +162,15 @@ async function viewProject(id) {
     if (st.status === 'review') btns.push(h('button', { class: 'ok sm', onclick: () => guard(() => be.approve(id, s), 'تمام ✓') }, '✓ موافق'));
     if (!running() && (st.status !== 'idle' || STAGES.indexOf(s) === 0 || p.stages[STAGES[STAGES.indexOf(s) - 1]].status === 'done')) btns.push(h('button', { class: 'ghost sm', onclick: () => guard(() => be.rerun(id, s)) }, st.status === 'idle' ? '▶ شغّل' : '↻ إعادة'));
     if (st.status === 'running') btns.push(h('button', { class: 'danger sm', onclick: () => guard(() => be.cancel(id)) }, 'إلغاء'));
-    const log = h('div', { class: 'log', id: 'log-' + s }, st.log.slice(-60).map(l => h('div', { class: /^✗/.test(l.msg) ? 'err' : '' }, l.msg)));
+    const log = h('div', { class: 'log', id: 'log-' + s }, st.log.slice(-60).map(l => h('div', { dir: 'auto', class: /^✗/.test(l.msg) ? 'err' : '' }, l.msg)));
     cards[s].replaceChildren(...clean(
       h('div', { class: 'stage-head' }, h('h2', {}, `${STAGES.indexOf(s) + 1}. ${STAGE_AR[s]}`), h('span', { class: 'badge ' + st.status }, STATUS_AR[st.status]), h('span', { class: 'spacer' }), appr, ...btns),
-      st.error ? h('div', { class: 'err small' }, st.error) : null,
+      st.error ? h('div', { class: 'errbox' },
+        h('div', { dir: 'auto' }, '⚠️ ' + st.error),
+        h('div', { class: 'row', style: 'margin-top:8px' },
+          ['key', 'model', 'network', 'quota'].includes(st.errorCode) ? h('a', { class: 'btn sm', href: '#/settings' }, '⚙ افتح الإعدادات') : null,
+          st.errorLink ? h('a', { class: 'btn sm primary', href: st.errorLink, target: '_blank', rel: 'noopener' }, st.errorCode === 'key' ? '🔑 هات مفتاح مجاني' : '↗ المساعدة') : null,
+          !running() ? h('button', { class: 'sm', onclick: () => guard(() => be.rerun(id, s)) }, '↻ جرّب تاني') : null)) : null,
       body,
       h('details', { open: st.status === 'running' || st.status === 'error' }, h('summary', {}, `السجل (${st.log.length})`), log),
     ));
@@ -328,7 +341,7 @@ async function viewProject(id) {
       refresh();
     } else if (ev.type === 'log') {
       const el = document.getElementById('log-' + ev.stage);
-      if (el) { el.append(h('div', { class: /^✗/.test(ev.line.msg) ? 'err' : '' }, ev.line.msg)); el.scrollTop = el.scrollHeight; }
+      if (el) { el.append(h('div', { dir: 'auto', class: /^✗/.test(ev.line.msg) ? 'err' : '' }, ev.line.msg)); el.scrollTop = el.scrollHeight; }
     } else if (ev.type === 'llm') {
       live.stream[ev.stage] = ev.delta == null ? ev.full : (live.stream[ev.stage] || '') + ev.delta;
       const el = document.getElementById('stream-' + ev.stage);
@@ -359,7 +372,13 @@ async function viewSettings() {
     return el;
   };
   const key = (path, link) => h('div', {}, h('div', { class: 'keyrow' }, inp(path, { type: 'password', class: 'ltr', autocomplete: 'off', placeholder: 'الصق المفتاح هنا' })), link ? h('div', { class: 'hint' }, 'هات مفتاح من ', h('a', { href: link, target: '_blank', rel: 'noopener' }, link)) : null);
-  const presets = h('div', { class: 'chips' }, LLM_PRESETS.map(pr => h('span', { class: 'chip', onclick: () => { f['llm.baseUrl'].value = pr.baseUrl; f['llm.model'].value = pr.model; toast(pr.name); } }, pr.name)));
+  const llmKeyHint = h('div', { class: 'hint' });
+  const updHint = () => {
+    const url = f['llm.baseUrl']?.value || s.llm.baseUrl;
+    const pr = providerOf(url);
+    llmKeyHint.replaceChildren(...clean(isLocalUrl(url) ? 'FreeLLMAPI على جهازك — مفيش مفتاح مطلوب (ما يشتغلش من الهاتف).' : pr.link ? ['هات مفتاح ', pr.name, ' مجاني من: ', h('a', { href: pr.link, target: '_blank', rel: 'noopener' }, pr.link)] : null));
+  };
+  const presets = h('div', { class: 'chips' }, LLM_PRESETS.map(pr => h('span', { class: 'chip', onclick: () => { f['llm.baseUrl'].value = pr.baseUrl; f['llm.model'].value = pr.model; updHint(); toast(pr.name + (pr.id === 'freellmapi' ? '' : ' — الصق المفتاح تحت')); } }, pr.name)));
   const voiceSel = h('select', {}, h('option', { value: s.eleven.voiceId }, s.eleven.voiceId || '— اختار صوت —'));
   const loadVoices = h('button', { onclick: async () => {
     await save(true);
@@ -395,7 +414,7 @@ async function viewSettings() {
       h('div', { class: 'hint' }, 'أي API متوافق مع OpenAI. الافتراضي FreeLLMAPI على جهازك.'), presets,
       h('label', {}, 'Base URL'), inp('llm.baseUrl', { class: 'ltr' }),
       h('div', { class: 'grid2' }, h('div', {}, h('label', {}, 'Model'), inp('llm.model', { class: 'ltr' })), h('div', {}, h('label', {}, 'Temperature'), inp('llm.temperature', { type: 'number', step: '0.1', min: 0, max: 2, class: 'ltr' }))),
-      h('label', {}, 'API key (اختياري لـ FreeLLMAPI)'), key('llm.apiKey'),
+      h('label', {}, 'API key (مطلوب لـ Gemini / Groq / OpenRouter — اختياري لـ FreeLLMAPI)'), key('llm.apiKey'), llmKeyHint,
       h('label', { class: 'row', style: 'gap:8px' }, h('input', { type: 'checkbox', checked: selfReview, onchange: e => (selfReview = e.target.checked) }), 'مراجعة ذاتية للستوري بورد (تمريرة تانية تحسّن الاختيارات)')),
     h('div', { class: 'card' }, h('h2', {}, '2. الصوت — ElevenLabs'),
       h('label', {}, 'API key'), key('eleven.apiKey', 'https://elevenlabs.io/app/developers/'),
@@ -422,6 +441,8 @@ async function viewSettings() {
       h('div', { class: 'row', style: 'margin-top:8px' },
         be.mode === 'server' ? h('button', { class: 'ghost sm', onclick: () => { localStorage.setItem('reel.mode', 'local'); location.reload(); } }, 'جرّب وضع المتصفح') : localStorage.getItem('reel.mode') === 'local' ? h('button', { class: 'ghost sm', onclick: () => { localStorage.removeItem('reel.mode'); location.reload(); } }, 'ارجع لوضع السيرفر') : null)),
   ));
+  updHint();
+  f['llm.baseUrl'].addEventListener('input', updHint);
 }
 
 // ---------------------------------------------------------------- boot

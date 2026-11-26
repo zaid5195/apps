@@ -10,6 +10,7 @@ import { resolveStoryboardIcons } from './icons.js';
 import { buildTimeline, videoDuration } from './timeline.js';
 import { mixAudio, encodeWav } from './audio.js';
 import { LANGS, lang as L } from './lang.js';
+import { friendly, providerOf, isLocalUrl, missingKey } from './errors.js';
 
 export const STAGES = ['script', 'voice', 'timing', 'storyboard', 'render'];
 export const LENGTHS = [10, 20, 30, 45, 60];
@@ -180,7 +181,7 @@ export class Pipeline {
         const st = p.stages[name];
         if (st.status === 'done') continue;
         if (st.status === 'review') break;
-        Object.assign(st, { status: 'running', error: null, startedAt: now(), endedAt: null, log: [] });
+        Object.assign(st, { status: 'running', error: null, errorCode: null, errorLink: null, startedAt: now(), endedAt: null, log: [] });
         await this.save(p);
         const settings = await this.env.getSettings();
         const ctx = {
@@ -193,11 +194,15 @@ export class Pipeline {
         try {
           await this['stage_' + name](p, ctx);
           if (ctrl.signal.aborted) throw new DOMException('Cancelled', 'AbortError');
-        } catch (e) {
-          const cancelled = ctrl.signal.aborted || e?.name === 'AbortError';
+        } catch (e0) {
+          const cancelled = ctrl.signal.aborted || e0?.name === 'AbortError';
+          const e = cancelled ? e0 : friendly(e0, this.serviceFor(name, settings, p));
           st.status = cancelled ? 'idle' : 'error';
           st.error = cancelled ? null : String(e?.message || e);
+          st.errorCode = cancelled ? null : e.code || 'other';
+          st.errorLink = cancelled ? null : e.link || '';
           st.endedAt = now();
+          if (!cancelled && e.raw && e.raw !== st.error) this.log(p, name, e.raw);
           this.log(p, name, cancelled ? 'Cancelled' : '✗ ' + st.error);
           await this.save(p);
           break;
@@ -216,9 +221,29 @@ export class Pipeline {
     return this.get(id);
   }
 
+  /** Which service a stage talks to (for error messages). */
+  serviceFor(stage, settings, p) {
+    if (stage === 'script' || stage === 'storyboard') {
+      const pr = providerOf(settings.llm.baseUrl);
+      let host = ''; try { host = new URL(settings.llm.baseUrl).host; } catch {}
+      return { name: pr.name, link: pr.link, local: isLocalUrl(settings.llm.baseUrl), host };
+    }
+    if (stage === 'timing' && p.voice?.provider === 'upload' && settings.stt !== 'elevenlabs') return { name: 'Deepgram', link: 'https://console.deepgram.com/' };
+    if (stage === 'voice' || stage === 'timing') return { name: 'ElevenLabs', link: 'https://elevenlabs.io/app/developers/' };
+    return { name: 'Render' };
+  }
+
+  /** Fail fast (before any call) when an online LLM has no key. */
+  checkLlm(settings) {
+    const { baseUrl, apiKey } = settings.llm;
+    if (!String(baseUrl || '').trim()) throw missingKey('LLM (Base URL)', '');
+    if (!apiKey && !isLocalUrl(baseUrl)) { const pr = providerOf(baseUrl); throw missingKey(pr.name, pr.link); }
+  }
+
   // ---------------------------------------------------------------- stages
   async stage_script(p, ctx) {
     const { settings } = ctx;
+    this.checkLlm(settings);
     const lg = p.lang || 'ar';
     const styleGuide = await this.env.loadStyleGuide(lg);
     ctx.log(`Writing a ${p.length}s ${L(lg).name} script (~${targetWords(p.length, lg)} words) with ${settings.llm.model || 'auto'} @ ${settings.llm.baseUrl}`);
@@ -296,6 +321,7 @@ export class Pipeline {
   async stage_storyboard(p, ctx) {
     if (!p.timing) throw new Error('No timing');
     const { settings } = ctx;
+    this.checkLlm(settings);
     const tokens = p.timing.tokens;
     const duration = videoDuration(tokens, p.voice?.duration);
     ctx.log(`Storyboarding ${tokens.length} words / ${duration.toFixed(1)} s`);
