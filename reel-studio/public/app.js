@@ -1,6 +1,7 @@
 // Reel Studio UI (RTL Arabic, mobile-first). Works against the PC server or fully in the browser (phone mode).
 import { STAGES, LENGTHS } from './core/pipeline.js';
 import { LLM_PRESETS } from './core/defaults.js';
+import { LANGS } from './core/lang.js';
 import { createRenderer, loadFonts } from './render/engine.js';
 
 const STAGE_AR = { script: 'السكريبت', voice: 'الصوت', timing: 'التوقيت', storyboard: 'الستوري بورد', render: 'الرندر' };
@@ -72,17 +73,19 @@ async function viewHome() {
   const ready = settings.has?.llm || /127\.0\.0\.1|localhost/.test(settings.llm.baseUrl);
   let length = +(localStorage.getItem('reel.length') || 10);
   let voiceSource = 'tts';
+  let lang = localStorage.getItem('reel.lang') || 'ar';
   const approvals = { ...settings.approvals };
   const topic = h('textarea', { placeholder: 'مثال: ليه بنتاوب لما نشوف حد بيتاوب؟', rows: 3, style: 'min-height:84px' });
   const notes = h('input', { type: 'text', placeholder: 'ملاحظات اختيارية للكاتب (زاوية، مصدر، جمهور…)' });
   const lenChips = h('div', { class: 'chips' }, LENGTHS.map(l => h('span', { class: 'chip' + (l === length ? ' on' : ''), onclick: e => { length = l; localStorage.setItem('reel.length', l); [...e.target.parentNode.children].forEach(c => c.classList.toggle('on', c === e.target)); } }, `${l} ث`)));
+  const langSeg = seg(Object.values(LANGS).map(l => [l.id, (l.id === 'ar' ? '🇪🇬 ' : '🇪🇸 ') + l.name]), lang, v => { lang = v; localStorage.setItem('reel.lang', v); topic.placeholder = v === 'es' ? 'Ejemplo: ¿Por qué bostezamos cuando alguien bosteza?' : 'مثال: ليه بنتاوب لما نشوف حد بيتاوب؟'; });
   const srcSeg = seg([['tts', 'صوت ElevenLabs'], ['upload', 'صوتي أنا (رفع ملف)']], voiceSource, v => (voiceSource = v));
   const apr = h('div', { class: 'grid2' }, STAGES.map(s => h('div', { class: 'row' }, h('span', { class: 'grow' }, STAGE_AR[s]), seg([['auto', 'تلقائي'], ['wait', 'استناني']], approvals[s], v => (approvals[s] = v)))));
   const go = h('button', { class: 'primary', onclick: async () => {
     if (!topic.value.trim()) return toast('اكتب الموضوع الأول', true);
     go.disabled = true;
     try {
-      const p = await guard(() => be.createProject({ topic: topic.value.trim(), length, notes: notes.value, approvals, voiceSource }));
+      const p = await guard(() => be.createProject({ topic: topic.value.trim(), length, notes: notes.value, approvals, voiceSource, lang }));
       location.hash = '#/p/' + p.id;
     } finally { go.disabled = false; }
   } }, '✦ ابدأ الريل');
@@ -93,6 +96,7 @@ async function viewHome() {
     h('div', { class: 'card' },
       h('h1', {}, 'ريل جديد'),
       h('label', {}, 'الموضوع'), topic,
+      h('label', {}, 'لغة الفيديو'), langSeg,
       h('label', {}, 'مدة الفيديو'), lenChips,
       h('label', {}, 'التعليق الصوتي'), srcSeg,
       h('details', {}, h('summary', {}, 'الموافقات لكل مرحلة + ملاحظات'), h('div', { class: 'hint' }, '«استناني» = توقف المرحلة لحد ما توافق أو تعدّل.'), apr, h('label', {}, 'ملاحظات'), notes),
@@ -102,7 +106,7 @@ async function viewHome() {
   ));
   const { projects } = await be.listProjects();
   list.replaceChildren(...(projects.length ? projects.map(p => h('a', { class: 'item', href: '#/p/' + p.id },
-    h('div', { class: 'grow' }, h('b', {}, p.title || p.topic), h('span', { class: 'muted small' }, `${p.length} ث · ${ago(p.updatedAt)}`)),
+    h('div', { class: 'grow' }, h('b', {}, p.title || p.topic), h('span', { class: 'muted small' }, `${p.lang === 'es' ? '🇪🇸' : '🇪🇬'} ${p.length} ث · ${ago(p.updatedAt)}`)),
     h('div', { class: 'dots', title: 'المراحل' }, STAGES.map(s => h('i', { class: 'dot s-' + p.stages[s] }))),
   )) : [h('div', { class: 'empty' }, 'لسه مفيش مشاريع — اكتب موضوع فوق وابدأ.')]));
 }
@@ -129,7 +133,7 @@ async function viewProject(id) {
 
   function drawHead() {
     head.replaceChildren(h('div', { class: 'row' },
-      h('div', { class: 'grow' }, h('h1', {}, p.title || p.topic), h('div', { class: 'muted small' }, `${p.topic} · ${p.length} ثانية`)),
+      h('div', { class: 'grow' }, h('h1', {}, p.title || p.topic), h('div', { class: 'muted small' }, `${p.topic} · ${p.length} ثانية · ${LANGS[p.lang || 'ar'].name}`)),
       h('button', { class: 'danger sm', onclick: async () => { if (confirm('امسح المشروع؟')) { await guard(() => be.deleteProject(id)); location.hash = '#/'; } } }, 'حذف'),
     ));
     stepper.replaceChildren(...STAGES.map(s => h('div', { class: 'step ' + p.stages[s].status, onclick: () => cards[s].scrollIntoView({ behavior: 'smooth' }) }, h('b', {}, STAGE_AR[s]), STATUS_AR[p.stages[s].status])));
@@ -166,8 +170,8 @@ async function viewProject(id) {
     if (st.status === 'running') return h('div', { class: 'stream', id: 'stream-script' }, live.stream.script || '…');
     if (!p.script) return h('p', { class: 'muted' }, 'الكاتب هيكتب سكريبت مصري بأسلوب السلسلة.');
     if (live.editing.script) {
-      const title = h('input', { type: 'text', value: p.script.title });
-      const text = h('textarea', { value: p.script.text, rows: 10 });
+      const title = h('input', { type: 'text', value: p.script.title, dir: 'auto' });
+      const text = h('textarea', { value: p.script.text, rows: 10, dir: p.lang === 'es' ? 'ltr' : 'rtl' });
       const count = h('span', { class: 'muted small' });
       const upd = () => (count.textContent = `${text.value.split(/\s+/).filter(Boolean).length} كلمة · الهدف ${p.script.target}`);
       text.addEventListener('input', upd); upd();
@@ -178,8 +182,8 @@ async function viewProject(id) {
           h('button', { class: 'ghost', onclick: () => { live.editing.script = false; refresh(); } }, 'إلغاء')));
     }
     return h('div', {},
-      h('h3', {}, p.script.title),
-      h('div', { style: 'white-space:pre-wrap;font-size:17px;line-height:2' }, p.script.text),
+      h('h3', { dir: 'auto' }, p.script.title),
+      h('div', { dir: p.lang === 'es' ? 'ltr' : 'rtl', style: 'white-space:pre-wrap;font-size:17px;line-height:2' }, p.script.text),
       h('div', { class: 'muted small' }, `${p.script.words} كلمة (الهدف ${p.script.target} ≈ ${p.length} ث × 2.6)`),
       p.script.sources?.length ? h('details', {}, h('summary', {}, 'المصادر'), h('ul', { class: 'small ltr', style: 'direction:ltr' }, p.script.sources.map(s => h('li', {}, s)))) : null,
       !running() ? h('button', { class: 'sm', style: 'margin-top:8px', onclick: () => { live.editing.script = true; refresh(); } }, '✎ تعديل') : null,
@@ -188,7 +192,7 @@ async function viewProject(id) {
 
   function bodyVoice() {
     const wrap = h('div');
-    const srcSeg = seg([['tts', 'ElevenLabs TTS'], ['upload', 'رفع صوتي']], p.voiceSource, v => guard(() => be.setVoiceSource(id, { source: v })));
+  const srcSeg = seg([['tts', 'ElevenLabs TTS'], ['upload', 'رفع صوتي']], p.voiceSource, v => guard(() => be.setVoiceSource(id, { source: v })));
     wrap.append(h('div', { class: 'row' }, srcSeg));
     if (p.voiceSource === 'upload') {
       const inp = h('input', { type: 'file', accept: 'audio/*,.mp3,.wav,.m4a,.ogg,.opus,.webm', onchange: async () => {
@@ -219,7 +223,7 @@ async function viewProject(id) {
     const { stats } = p.timing;
     const au = h('audio', { controls: true, style: 'width:100%' });
     if (p.voice) be.fileUrl(id, p.voice.file).then(u => (au.src = u));
-    const words = h('div', { class: 'words' }, p.timing.tokens.map((t, i) => h('span', { class: 'word' + (t.weak ? ' weak' : ''), 'data-i': i, title: `coverage ${t.coverage}`, onclick: async () => {
+    const words = h('div', { class: 'words', dir: p.lang === 'es' ? 'ltr' : 'rtl' }, p.timing.tokens.map((t, i) => h('span', { class: 'word' + (t.weak ? ' weak' : ''), 'data-i': i, title: `coverage ${t.coverage}`, onclick: async () => {
       if (au.src && !au.paused) { const tt = au.currentTime; if (confirm(`اضبط بداية «${t.text}» على ${tt.toFixed(2)}؟`)) { const toks = p.timing.tokens.map((x, j) => (j === i ? { start: tt } : {})); await guard(() => be.edit(id, 'timing', { tokens: toks }), 'اتعدل'); } return; }
       const v = prompt(`بداية «${t.text}» بالثواني`, t.start);
       if (v == null || isNaN(+v)) return;
@@ -403,7 +407,7 @@ async function viewSettings() {
       h('label', {}, 'Deepgram API key'), key('deepgram.apiKey', 'https://console.deepgram.com/'),
       h('div', { class: 'grid2' }, h('div', {}, h('label', {}, 'Model'), inp('deepgram.model', { class: 'ltr' })), h('div', {}, h('label', {}, 'Base URL'), inp('deepgram.baseUrl', { class: 'ltr' })))),
     h('div', { class: 'card' }, h('h2', {}, '4. الشكل والرندر'),
-      h('label', {}, 'اسم السلسلة (التاج اللي فوق)'), inp('seriesTag'),
+      h('div', { class: 'grid2' }, h('div', {}, h('label', {}, 'اسم السلسلة — عربي'), inp('seriesTag')), h('div', {}, h('label', {}, 'اسم السلسلة — Español'), inp('seriesTagEs', { dir: 'ltr' }))),
       fontBlock,
       h('label', {}, 'مستوى المؤثرات الصوتية (0 = بدون، 1 = عادي)'), inp('sfxLevel', { type: 'number', step: '0.1', min: 0, max: 2, class: 'ltr' }),
       be.mode === 'server' ? h('div', {}, h('label', {}, 'محرك الرندر'), seg([['auto', 'تلقائي'], ['server', 'Chromium + ffmpeg'], ['browser', 'المتصفح (WebCodecs)']], renderer, v => (renderer = v))) : null,

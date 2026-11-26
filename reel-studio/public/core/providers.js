@@ -65,11 +65,11 @@ export async function deepgramListen({ apiKey, audio, mime = 'audio/mpeg', model
 }
 
 /** ElevenLabs Scribe speech-to-text (word timestamps). Works straight from a phone browser. */
-export async function elevenSTT({ apiKey, audio, mime = 'audio/mpeg', fileName = 'voice.mp3', baseUrl = 'https://api.elevenlabs.io', fetchImpl = fetch, signal }) {
+export async function elevenSTT({ apiKey, audio, mime = 'audio/mpeg', fileName = 'voice.mp3', languageCode = 'ara', baseUrl = 'https://api.elevenlabs.io', fetchImpl = fetch, signal }) {
   if (!apiKey) throw new Error('ElevenLabs API key is missing (Settings)');
   const form = new FormData();
   form.append('model_id', 'scribe_v1');
-  form.append('language_code', 'ara');
+  form.append('language_code', languageCode);
   form.append('timestamps_granularity', 'word');
   form.append('file', new Blob([audio], { type: mime }), fileName);
   const res = await fetchImpl(`${trimBase(baseUrl)}/v1/speech-to-text`, { method: 'POST', headers: { 'xi-api-key': apiKey }, body: form, signal });

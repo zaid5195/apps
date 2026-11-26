@@ -76,6 +76,19 @@ const mix = mixAudio({ sampleRate: sr, channels: [tone] }, tl.sfx, 6);
 t(`mix normalised to -14 LUFS (${mix.lufs.toFixed(2)})`, Math.abs(mix.lufs + 14) < 0.3);
 t('mix peak ≤ -1 dBFS', mix.channels[0].reduce((m, v) => Math.max(m, Math.abs(v)), 0) <= 0.9);
 
+// Spanish
+const es = tokenize('¿Sabes por qué el corazón late?\n¡Es increíble! ADN y células.');
+t('es: opening ¿ ¡ glued to next word', es[0].text === '¿Sabes' && es.find(x => x.text.startsWith('¡')).text === '¡Es');
+t('es: accents normalised for matching', normalize('Corazón ÑANDÚ') === 'corazonnandu');
+const esAl = alignTokens(tokenize('¿Sabes por qué late el corazón?'), [
+  { text: 'sabes', start: 0.2, end: 0.5 }, { text: 'por', start: 0.55, end: 0.7 }, { text: 'que', start: 0.72, end: 0.9 },
+  { text: 'late', start: 0.95, end: 1.2 }, { text: 'elcorazon', start: 1.25, end: 1.9 }]);
+t('es: alignment through accents/merges (glued word flagged)', esAl.stats.weak === 1 && esAl.tokens[5].estimated && esAl.tokens[0].start === 0.2 && esAl.tokens[5].start > 1.35);
+t('es: series question ensured', ensureSeriesQuestion('Hook.\nMás', 'es').script.split('\n')[1] === '¿Sabes por qué?');
+const esTok = tokenize('Tu corazón late ¿Sabes por qué? Porque tiene electricidad propia dentro').map((x, i) => ({ ...x, start: i * 0.4, end: i * 0.4 + 0.3 }));
+t('es: repair finds the question scene', repairStoryboard({ scenes: [] }, esTok, { lang: 'es' }).storyboard.scenes.some(s => s.type === 'question' && s.at === 3));
+t('es: parse Spanish labels', parseScript('TÍTULO: Hola\nGUION:\nLínea uno\nFUENTES:\n- NASA').title === 'Hola');
+
 // icons
 const lib = JSON.parse(readFileSync(new URL('../public/assets/icons/icons.json', import.meta.url)));
 t('icons: licences included', lib.sets.health.license === 'CC0-1.0' && lib.sets.tabler.license === 'MIT');

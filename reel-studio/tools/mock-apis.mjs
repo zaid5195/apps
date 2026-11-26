@@ -37,7 +37,29 @@ function mockScript(topic, words) {
   if (words <= 30) { lines.length = 2; lines.push('السر في cells شغالة زي فريق.'); return { lines: [...lines, 'زي مترو الصبح.', 'يعني شغل جماعي.'] }; }
   return { lines: [...lines, analogy, recap] };
 }
+const POOL_ES = [
+  'Tu cuerpo tiene miles de millones de células trabajando sin parar.',
+  'Cada célula toma oxígeno y lo convierte en energía.',
+  'Esa energía viaja por la sangre a toda velocidad.',
+  'El cerebro manda señales eléctricas en milésimas de segundo.',
+  'Y si algo falla, el cuerpo lo compensa rápido.',
+  'Los científicos lo midieron con aparatos muy precisos.',
+];
+function scriptAnswerEs(topic, words) {
+  const lines = [`${topic}… pasa dentro de ti todos los días y ni lo notas.`, '¿Sabes por qué?', 'El secreto está en células que trabajan en equipo.'];
+  const analogy = 'Es como el metro en hora punta: cada uno sabe a dónde va.';
+  const recap = 'O sea, todo es trabajo en equipo.';
+  if (words <= 32) return [lines[0], lines[1], 'Hay células trabajando en equipo.', 'Como el metro en hora punta.', 'O sea, trabajo en equipo.'];
+  let k = 0;
+  while ([...lines, analogy, recap].join(' ').split(/\s+/).length < words - 6 && k < 18) lines.push(POOL_ES[k++ % POOL_ES.length]);
+  return [...lines, analogy, recap];
+}
 function scriptAnswer(user) {
+  if (/Language: Español/.test(user)) {
+    const topic = (user.match(/Topic:\s*(.+)/) || [, 'el tema'])[1].trim();
+    const words = +(user.match(/about (\d+) spoken words/) || [, 28])[1];
+    return `<think>Spanish script…</think>\n**TITLE:** ¿Por qué ${topic.replace(/[¿?]/g, '')}?\n**SCRIPT:**\n${scriptAnswerEs(topic, words).join('\n')}\n**SOURCES:**\n- OpenStax Biology 2e — https://openstax.org/details/books/biology-2e`;
+  }
   const topic = (user.match(/Topic:\s*(.+)/) || [, 'الموضوع'])[1].trim();
   const words = +(user.match(/about (\d+) spoken words/) || [, 26])[1];
   const { lines } = mockScript(topic, words);
@@ -63,12 +85,14 @@ const TEMPLATE_CYCLE = [
   { type: 'concept', template: 'layers', items: [['جلد', 'skin'], ['عضلات', 'muscle'], ['عظم', 'bone']] },
   { type: 'process', template: 'timeline', items: [['اكتشاف', 'microscope', 1665], ['تجارب', 'flask', 1850], ['اليوم', 'chip', 2024]] },
 ];
+const ES_LABEL = { 'الجسم': 'Cuerpo', 'الخلية': 'Célula', 'الدم': 'Sangre', 'طاقة': 'Energía', 'كفاءة': 'Eficiencia', 'القلب': 'Corazón', 'قبل': 'Antes', 'بعد': 'Después', 'شهيق': 'Inhalar', 'دم': 'Sangre', 'خلايا': 'Células', 'زفير': 'Exhalar', 'دقيقة': 'Minuto', 'ساعة': 'Hora', 'يوم': 'Día', 'جلد': 'Piel', 'عضلات': 'Músculo', 'عظم': 'Hueso', 'اكتشاف': 'Hallazgo', 'تجارب': 'Pruebas', 'اليوم': 'Hoy' };
 function storyboardAnswer(user) {
   const w = parseWords(user);
   const n = w.length;
   const dur = +(user.match(/Duration:\s*([\d.]+)/) || [, w[n - 1]?.t || 10])[1];
-  const qi = w.findIndex(x => x.text.startsWith('عارف'));
-  const scenes = [{ type: 'intro', at: 0, template: 'hero', title: 'ليه بيحصل كده؟', icon: 'heart' }];
+  const qi = w.findIndex(x => x.text.startsWith('عارف') || /^¿?sabes$/i.test(x.text));
+  const es = w.some(x => /^¿?sabes$/i.test(x.text));
+  const scenes = [{ type: 'intro', at: 0, template: 'hero', title: es ? '¿Por qué pasa?' : 'ليه بيحصل كده؟', icon: 'heart' }];
   if (qi > 0) scenes.push({ type: 'question', at: qi, template: 'ask' });
   const startAt = qi > 0 ? qi + 2 : 2;
   const rest = Math.max(1, Math.round((dur - (w[startAt]?.t || 0)) / 3.2));
@@ -76,9 +100,9 @@ function storyboardAnswer(user) {
     const at = Math.min(n - 1, startAt + Math.floor((k * (n - startAt)) / rest));
     const tpl = TEMPLATE_CYCLE[k % TEMPLATE_CYCLE.length];
     const span = Math.max(1, Math.floor((n - startAt) / rest));
-    scenes.push({ ...tpl, at, items: tpl.items.map(([label, icon, value], j) => ({ label, icon, value, at: at + Math.floor((j * span) / tpl.items.length) })) });
+    scenes.push({ ...tpl, at, items: tpl.items.map(([label, icon, value], j) => ({ label: es ? (ES_LABEL[label] || label) : label, icon, value, at: at + Math.floor((j * span) / tpl.items.length) })) });
   }
-  scenes[scenes.length - 1] = { type: 'recap', at: scenes[scenes.length - 1].at, template: 'checklist', items: [{ label: 'فريق شغال', icon: 'people' }, { label: 'طاقة مستمرة', icon: 'bolt' }] };
+  scenes[scenes.length - 1] = { type: 'recap', at: scenes[scenes.length - 1].at, template: 'checklist', items: es ? [{ label: 'Trabajo en equipo', icon: 'people' }, { label: 'Energía constante', icon: 'bolt' }] : [{ label: 'فريق شغال', icon: 'people' }, { label: 'طاقة مستمرة', icon: 'bolt' }] };
   scenes.push({ type: 'concept', at: n + 40, template: 'zoom' }); // deliberately invalid → repair drops/clamps it
   const accents = [[0, 'accent', true], [qi > 0 ? qi : 1, 'accent2'], [Math.min(n - 1, startAt + 1), 'success'], [Math.floor(n / 2), 'accent']];
   return '```json\n' + JSON.stringify({ scenes, accents }) + '\n```';
@@ -179,7 +203,7 @@ async function speak(req, res, body) {
   json(res, 200, { audio_base64: mp3.toString('base64'), alignment, normalized_alignment: alignment });
 }
 // STT spelling drift so the LCS alignment has real work to do.
-const drift = w => w.replace(/[.,،؟?!…:]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة$/, 'ه').replace(/ى$/, 'ي');
+const drift = w => w.replace(/[.,،؟?!…:¿¡]/g, '').replace(/á/g, 'a').replace(/é/g, 'e').replace(/[أإآ]/g, 'ا').replace(/ة$/, 'ه').replace(/ى$/, 'ي');
 function transcribe(bytes) {
   const words = tts.get(createHash('sha1').update(bytes).digest('hex'));
   if (!words) return [{ text: 'كلام', start: 0.2, end: 0.6 }, { text: 'مش', start: 0.7, end: 0.9 }, { text: 'معروف', start: 1.0, end: 1.5 }];

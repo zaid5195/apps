@@ -90,7 +90,7 @@ button.sm { min-height: 34px; padding: 6px 12px; font-size: 13px; border-radius:
 .stream { background: var(--bg); border-radius: 10px; padding: 10px; white-space: pre-wrap; font-size: 14px; max-height: 260px; overflow: auto; border: 1px solid rgba(39,184,199,.25); }
 .bar { height: 8px; background: var(--bg); border-radius: 99px; overflow: hidden; } .bar > i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .2s; }
 
-.words { display: flex; flex-wrap: wrap; gap: 6px; direction: rtl; }
+.words { display: flex; flex-wrap: wrap; gap: 6px; }
 .word { background: var(--elev); border-radius: 8px; padding: 4px 8px; font-size: 14px; cursor: pointer; border: 1px solid transparent; }
 .word small { display: block; color: var(--sec); font-size: 10px; direction: ltr; text-align: center; }
 .word.weak { border-color: var(--warn); background: rgba(242,138,48,.1); }

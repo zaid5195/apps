@@ -5,6 +5,7 @@ export const DEFAULT_SETTINGS = {
   deepgram: { baseUrl: 'https://api.deepgram.com', apiKey: '', model: 'nova-3', language: 'ar' },
   stt: 'deepgram',
   seriesTag: 'عارف ليه؟',
+  seriesTagEs: '¿Sabes por qué?',
   fontFolder: '',
   approvals: { script: 'wait', voice: 'auto', timing: 'auto', storyboard: 'auto', render: 'auto' },
   selfReview: true,

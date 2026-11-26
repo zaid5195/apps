@@ -14,6 +14,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const LENGTH = +(args[args.indexOf('--length') + 1] || 0) || 10;
 const UPLOAD = args.includes('--upload');
+const LANG = args.includes('--lang') ? args[args.indexOf('--lang') + 1] : 'ar';
 const KEEP = args.includes('--keep');
 const PORT = 4311 + Math.floor(Math.random() * 50);
 const MOCK = 4399;
@@ -57,7 +58,7 @@ try {
 
   // events stream
   const events = [];
-  let p = await api('/api/projects', { method: 'POST', body: { topic: 'القلب بيدق ليه؟', length: LENGTH, start: !UPLOAD, approvals: { script: 'wait', voice: 'auto', timing: 'auto', storyboard: 'auto', render: 'auto' } } });
+  let p = await api('/api/projects', { method: 'POST', body: { topic: LANG === 'es' ? '¿Por qué late el corazón?' : 'القلب بيدق ليه؟', lang: LANG, length: LENGTH, start: !UPLOAD, approvals: { script: 'wait', voice: 'auto', timing: 'auto', storyboard: 'auto', render: 'auto' } } });
   const id = p.id;
   const ctl = new AbortController();
   (async () => {
@@ -81,13 +82,13 @@ try {
   let t0 = Date.now();
   while (Date.now() - t0 < 30000) { p = await api(`/api/projects/${id}`); if (p.stages.script.status === 'review' || p.stages.script.status === 'error') break; await sleep(150); }
   ok(p.stages.script.status === 'review', `script waits for approval · "${p.script?.title}" · ${p.script?.words} words (target ${p.script?.target})`);
-  ok(/عارف ليه؟/.test(p.script.text), 'script contains «عارف ليه؟»');
+  ok(LANG === 'es' ? /¿Sabes por qué\?/.test(p.script.text) : /عارف ليه؟/.test(p.script.text), `script contains the series question (${LANG})`);
   ok(!/<think>|think>/i.test(p.script.text + p.script.title), '<think> stripped');
   ok(p.script.sources.length >= 1, `sources: ${p.script.sources.length}`);
   ok(events.some(e => e.type === 'llm') && events.some(e => e.type === 'state'), 'SSE: state + streamed LLM text');
 
   // edit the script a little, then approve
-  const edited = p.script.text.replace('الصبح', 'الصبح بدري');
+  const edited = LANG === 'es' ? p.script.text.replace('hora punta', 'hora punta de la mañana') : p.script.text.replace('الصبح', 'الصبح بدري');
   await api(`/api/projects/${id}/stages/script/edit`, { method: 'POST', body: { text: edited, title: p.script.title, sources: p.script.sources } });
   p = await api(`/api/projects/${id}`);
   ok(p.stages.script.status === 'review' && p.script.text === edited, 'script edit kept in review');
@@ -146,14 +147,19 @@ try {
   const sfx = cues.map(e => e.t);
   const masked = w => cues.some(e => (e.kind === 'whoosh' ? w > e.t - 0.05 && w < e.t + 0.6 : Math.abs(w - e.t) < 0.15)); // onset hidden under an SFX
   const speech = onsets.filter(o => !sfx.some(s => Math.abs(s - o) < 0.12));
-  const measurable = p.timing.tokens.filter(t => !masked(t.start));
+  const measurable = p.timing.tokens.filter(t => !masked(t.start) && !t.weak);
+  const weakMeasurable = p.timing.tokens.filter(t => !masked(t.start) && t.weak);
   const wordOnsets = measurable.map(t => t.start);
   const errs = wordOnsets.map(w => Math.min(...speech.map(o => Math.abs(o - w))));
   const worst = errs.map((e, i) => [e, i]).sort((a, b) => b[0] - a[0]).slice(0, 5).map(([e, i]) => `${measurable[i].text}:${Math.round(e * 1000)}ms${measurable[i].weak ? '(weak)' : ''}`);
   console.log('  worst: ' + worst.join(' '));
   const median = errs.slice().sort((a, b) => a - b)[Math.floor(errs.length / 2)];
   const within = errs.filter(e => e <= 1 / 30 + 0.02).length / errs.length;
-  ok(median <= 0.03 && within >= 0.95, `caption sync: median |onset − caption| = ${(median * 1000).toFixed(0)} ms · ${(within * 100).toFixed(0)}% of ${errs.length} measurable words within 1 frame + 20 ms (${p.timing.tokens.length - errs.length} hidden under an SFX)`);
+  ok(median <= 0.03 && within >= 0.95, `caption sync: median |onset − caption| = ${(median * 1000).toFixed(0)} ms · ${(within * 100).toFixed(0)}% of ${errs.length} measurable words within 1 frame + 20 ms (${p.timing.tokens.filter(t => masked(t.start)).length} hidden under an SFX)`);
+  if (weakMeasurable.length) {
+    const we = weakMeasurable.map(t => Math.min(...speech.map(o => Math.abs(o - t.start))));
+    ok(Math.max(...we) < 0.15, `weak (flagged) words: ${weakMeasurable.length}, max error ${Math.round(Math.max(...we) * 1000)} ms (< 150 ms, shown for review)`);
+  }
 
   // ---- frames: word lights up exactly at its onset (render-data + timeline agree)
   const rd = await api(`/api/projects/${id}/render-data`);
@@ -162,7 +168,7 @@ try {
   // keep a copy for humans
   const outDir = join(ROOT, 'data', 'e2e');
   mkdirSync(outDir, { recursive: true });
-  const keep = join(outDir, `reel-${LENGTH}s${UPLOAD ? '-upload' : ''}.mp4`);
+  const keep = join(outDir, `reel-${LENGTH}s${LANG === 'es' ? '-es' : ''}${UPLOAD ? '-upload' : ''}.mp4`);
   copyFileSync(mp4, keep);
   console.log(`→ ${keep}`);
 

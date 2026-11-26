@@ -9,6 +9,7 @@ import { storyboardMessages, repairStoryboard, lintStoryboard, reviewMessages } 
 import { resolveStoryboardIcons } from './icons.js';
 import { buildTimeline, videoDuration } from './timeline.js';
 import { mixAudio, encodeWav } from './audio.js';
+import { LANGS, lang as L } from './lang.js';
 
 export const STAGES = ['script', 'voice', 'timing', 'storyboard', 'render'];
 export const LENGTHS = [10, 20, 30, 45, 60];
@@ -19,13 +20,13 @@ const now = () => new Date().toISOString();
 const newStage = () => ({ status: 'idle', log: [], error: null, startedAt: null, endedAt: null });
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
-export function newProject({ topic, length = 30, notes = '', approvals, voiceSource = 'tts', voiceId } = {}) {
+export function newProject({ topic, length = 30, notes = '', approvals, voiceSource = 'tts', voiceId, lang = 'ar' } = {}) {
   if (!topic || !String(topic).trim()) throw new Error('Topic is required');
   length = LENGTHS.includes(Number(length)) ? Number(length) : 30;
   const stages = {};
   for (const s of STAGES) stages[s] = newStage();
   return {
-    id: uid(), topic: String(topic).trim(), length, notes: String(notes || ''), title: '', createdAt: now(), updatedAt: now(),
+    id: uid(), topic: String(topic).trim(), lang: LANGS[lang] ? lang : 'ar', length, notes: String(notes || ''), title: '', createdAt: now(), updatedAt: now(),
     voiceSource: voiceSource === 'upload' ? 'upload' : 'tts', voiceId: voiceId || '', approvals: { ...DEFAULT_APPROVALS, ...(approvals || {}) }, stages,
   };
 }
@@ -36,7 +37,8 @@ export function renderData(p, settings = {}) {
   return {
     v: 1, id: p.id, fps: FPS, w: 720, h: 1280, scale: 1.5,
     duration: p.render?.duration || videoDuration(tokens, p.voice?.duration),
-    title: p.script?.title || p.title || p.topic, series: settings.seriesTag || 'عارف ليه؟', tokens,
+    title: p.script?.title || p.title || p.topic, lang: p.lang || 'ar',
+    series: (p.lang === 'es' ? settings.seriesTagEs : settings.seriesTag) || L(p.lang).series, tokens,
     storyboard: p.storyboard || { scenes: [], accents: [] }, icons: p.icons || {}, iconMap: p.iconMap || {},
   };
 }
@@ -134,7 +136,7 @@ export class Pipeline {
     if (stage === 'script') {
       const text = String(payload.text ?? p.script?.text ?? '').trim();
       if (!text) throw Object.assign(new Error('Script is empty'), { status: 400 });
-      const len = checkLength(text, p.length);
+      const len = checkLength(text, p.length, p.lang);
       p.script = { ...(p.script || {}), title: String(payload.title ?? p.script?.title ?? ''), text, sources: Array.isArray(payload.sources) ? payload.sources : p.script?.sources || [], words: len.words, target: len.target, edited: true };
       p.title = p.script.title;
     } else if (stage === 'timing') {
@@ -148,7 +150,7 @@ export class Pipeline {
       p.timing.edited = true;
     } else if (stage === 'storyboard') {
       if (!p.timing) throw Object.assign(new Error('Timing first'), { status: 409 });
-      const { storyboard, fixes } = repairStoryboard(payload.storyboard ?? payload, p.timing.tokens, { title: p.script?.title });
+      const { storyboard, fixes } = repairStoryboard(payload.storyboard ?? payload, p.timing.tokens, { title: p.script?.title, lang: p.lang });
       p.storyboard = storyboard;
       p.storyboardFixes = fixes;
       const lib = await this.env.loadIcons();
@@ -217,22 +219,23 @@ export class Pipeline {
   // ---------------------------------------------------------------- stages
   async stage_script(p, ctx) {
     const { settings } = ctx;
-    const styleGuide = await this.env.loadStyleGuide();
-    ctx.log(`Writing a ${p.length}s script (~${targetWords(p.length)} words) with ${settings.llm.model || 'auto'} @ ${settings.llm.baseUrl}`);
-    let messages = scriptMessages({ topic: p.topic, seconds: p.length, styleGuide, notes: p.notes });
+    const lg = p.lang || 'ar';
+    const styleGuide = await this.env.loadStyleGuide(lg);
+    ctx.log(`Writing a ${p.length}s ${L(lg).name} script (~${targetWords(p.length, lg)} words) with ${settings.llm.model || 'auto'} @ ${settings.llm.baseUrl}`);
+    let messages = scriptMessages({ topic: p.topic, seconds: p.length, styleGuide, notes: p.notes, lang: lg });
     let parsed, len, raw;
     for (let attempt = 0; attempt < 2; attempt++) {
       raw = await chatStream({ ...settings.llm, messages, temperature: settings.llm.temperature ?? 0.8, signal: ctx.signal, onDelta: ctx.llm, fetchImpl: this.env.fetch, log: ctx.log });
       parsed = parseScript(raw);
       if (!parsed.script) throw new Error('The model returned no script');
-      len = checkLength(parsed.script, p.length);
+      len = checkLength(parsed.script, p.length, lg);
       if (len.ok || attempt === 1) break;
       ctx.log(`Length ${len.words} words vs target ${len.target} — asking for a corrected version`);
       messages = [...messages, { role: 'assistant', content: raw }, { role: 'user', content: `The SCRIPT has ${len.words} words but must have about ${len.target}. Rewrite it ${len.ratio > 1 ? 'shorter' : 'longer'} in the same format.` }];
     }
-    const q = ensureSeriesQuestion(parsed.script);
-    if (q.fixed) ctx.log('Inserted the series question «عارف ليه؟» after the hook');
-    len = checkLength(q.script, p.length);
+    const q = ensureSeriesQuestion(parsed.script, lg);
+    if (q.fixed) ctx.log(`Inserted the series question «${L(lg).question}» after the hook`);
+    len = checkLength(q.script, p.length, lg);
     p.script = { title: parsed.title || p.topic, text: q.script, sources: parsed.sources, words: len.words, target: len.target, raw };
     p.title = p.script.title;
     ctx.log(`Title: ${p.script.title} · ${len.words} words (target ${len.target}) · ${parsed.sources.length} sources`);
@@ -273,8 +276,8 @@ export class Pipeline {
       provider = settings.stt === 'elevenlabs' ? 'elevenlabs-scribe' : 'deepgram';
       ctx.log(`Transcribing the uploaded audio with ${provider}…`);
       const r = provider === 'deepgram'
-        ? await deepgramListen({ ...settings.deepgram, audio: bytes, mime: p.voice.mime, signal: ctx.signal, fetchImpl: this.env.fetch })
-        : await elevenSTT({ ...settings.eleven, audio: bytes, mime: p.voice.mime, fileName: p.voice.file, signal: ctx.signal, fetchImpl: this.env.fetch });
+        ? await deepgramListen({ ...settings.deepgram, language: L(p.lang).deepgram, audio: bytes, mime: p.voice.mime, signal: ctx.signal, fetchImpl: this.env.fetch })
+        : await elevenSTT({ ...settings.eleven, languageCode: L(p.lang).scribe, audio: bytes, mime: p.voice.mime, fileName: p.voice.file, signal: ctx.signal, fetchImpl: this.env.fetch });
       words = r.words;
       await this.env.store.writeFile(p.id, 'words.json', JSON.stringify({ source: provider, transcript: r.transcript, words }));
     } else {
@@ -300,18 +303,19 @@ export class Pipeline {
       const raw = await chatStream({ ...settings.llm, messages, temperature: 0.5, signal: ctx.signal, onDelta: ctx.llm, fetchImpl: this.env.fetch, log: ctx.log });
       try { return extractJson(raw); } catch (e) { ctx.log(`${label}: ${e.message}`); return null; }
     };
-    let json = await ask(storyboardMessages({ title: p.script.title, tokens, duration }), 'storyboard');
-    if (!json) { ctx.log('Retrying for valid JSON…'); json = await ask(storyboardMessages({ title: p.script.title, tokens, duration }), 'storyboard'); }
+    const lg = p.lang || 'ar';
+    let json = await ask(storyboardMessages({ title: p.script.title, tokens, duration, lang: lg }), 'storyboard');
+    if (!json) { ctx.log('Retrying for valid JSON…'); json = await ask(storyboardMessages({ title: p.script.title, tokens, duration, lang: lg }), 'storyboard'); }
     if (!json) throw new Error('The model did not return a valid storyboard JSON');
-    let { storyboard, fixes } = repairStoryboard(json, tokens, { title: p.script.title });
+    let { storyboard, fixes } = repairStoryboard(json, tokens, { title: p.script.title, lang: lg });
     if (fixes.length) ctx.log(`Repaired: ${fixes.join('; ')}`);
     if (settings.selfReview !== false) {
       const issues = lintStoryboard(storyboard, tokens, duration);
       ctx.log(`Self-review pass (${issues.length} issues)${issues.length ? ': ' + issues.join('; ') : ''}`);
       ctx.llm(null, '');
-      const reviewed = await ask(reviewMessages({ storyboard, issues, tokens, duration }), 'review');
+      const reviewed = await ask(reviewMessages({ storyboard, issues, tokens, duration, lang: lg }), 'review');
       if (reviewed) {
-        const r2 = repairStoryboard(reviewed, tokens, { title: p.script.title });
+        const r2 = repairStoryboard(reviewed, tokens, { title: p.script.title, lang: lg });
         const before = issues.length, after = lintStoryboard(r2.storyboard, tokens, duration).length;
         if (r2.storyboard.scenes.length >= Math.max(2, Math.floor(storyboard.scenes.length / 2)) && after <= before) {
           ctx.log(`Review accepted (${before} → ${after} issues)${r2.fixes.length ? ' · repaired: ' + r2.fixes.join('; ') : ''}`);

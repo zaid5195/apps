@@ -15,6 +15,7 @@ export function normChar(c) {
   if (code >= 0x6f0 && code <= 0x6f9) return String(code - 0x6f0);
   const m = MAP[c];
   if (m) return m;
+  if (code < 0x250 && code > 0x7f) c = c.normalize('NFD').replace(/[\u0300-\u036f]/g, '') || c; // á→a, ñ→n, ü→u
   if (!/[\p{L}\p{N}]/u.test(c)) return '';
   return c.toLowerCase();
 }
@@ -41,7 +42,10 @@ export function tokenize(script) {
   for (const line of lines) {
     const parts = line.split(/\s+/).filter(Boolean);
     let added = false;
-    for (const p of parts) {
+    let prefix = '';
+    for (let p of parts) {
+      if (!normalize(p) && /^[¿¡«“"(\[]+$/.test(p)) { prefix += p; continue; } // opening marks belong to the next word
+      if (prefix && normalize(p)) { p = prefix + p; prefix = ''; }
       if (!normalize(p)) {
         if (tokens.length && !tokens[tokens.length - 1].br) tokens[tokens.length - 1].text += p;
         else if (tokens.length) tokens[tokens.length - 1].text += p;

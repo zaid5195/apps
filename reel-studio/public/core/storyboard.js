@@ -1,5 +1,6 @@
 // Storyboard stage: prompt, validation/repair, lint and self-review prompt.
 import { normalize, clamp } from './text.js';
+import { lang as L } from './lang.js';
 
 export const SCENE_TYPES = ['intro', 'question', 'concept', 'process', 'compare', 'stat', 'recap'];
 export const TEMPLATES = ['body', 'zoom', 'flow', 'cycle', 'timeline', 'chart', 'layers', 'cards', 'meter'];
@@ -41,11 +42,12 @@ export function sceneCountFor(duration) {
   return clamp(Math.round(duration / 3.3), 3, 18);
 }
 
-export function storyboardMessages({ title, tokens, duration }) {
+export function storyboardMessages({ title, tokens, duration, lang = 'ar' }) {
+  const lg = L(lang);
   const words = tokens.map((t, i) => `${i}:${t.text}@${t.start.toFixed(1)}`).join(' ');
   const n = sceneCountFor(duration);
   const sys = `You are the motion designer of a dark, technical, illustrated science-explainer reel (vertical 9:16).
-You turn a timed Egyptian-Arabic script into a storyboard. Reply with ONE JSON object and nothing else.
+You turn a timed ${lg.labelLang} script into a storyboard. Reply with ONE JSON object and nothing else.
 
 JSON schema:
 {
@@ -53,11 +55,11 @@ JSON schema:
     { "type": "<${SCENE_TYPES.join('|')}>",
       "at": <word index where the scene starts>,
       "template": "<${ALL_TEMPLATES.join('|')}>",
-      "title": "<optional short Arabic heading, ≤ 4 words>",
+      "title": "<optional short ${lg.labelLang} heading, ≤ 4 words>",
       "icon": "<main icon: ONE simple English noun, e.g. heart, cell, sun, battery>",
       "organ": "<body template only: ${ORGANS.join('|')}>",
       "value": <meter only: number>, "max": <meter only: number>, "unit": "<meter/chart unit, e.g. % or bpm>",
-      "items": [ { "label": "<Arabic, ≤ 3 words; English loanwords stay English>", "icon": "<English noun>", "value": <number, chart/timeline only>, "at": <word index when it appears> } ]
+      "items": [ { "label": "<${lg.labelLang}, ≤ 3 words${lg.rtl ? '; English loanwords stay English' : ''}>", "icon": "<English noun>", "value": <number, chart/timeline only>, "at": <word index when it appears> } ]
     }
   ],
   "accents": [ [<word index>, "<${TONES.join('|')}>", <true to underline> ] ]
@@ -65,7 +67,7 @@ JSON schema:
 
 Templates:
 - hero: title card with one big icon (use for intro)
-- ask: big «عارف ليه؟» moment (use for the question scene)
+- ask: big «${lg.question}» moment (use for the question scene)
 - body: one organ glowing inside a human body outline (organ + label)
 - zoom: macro → micro, 2–3 levels (e.g. body → cell → DNA)
 - flow: A → B → C causal steps (2–4 items)
@@ -79,7 +81,7 @@ Templates:
 
 Rules:
 - The first scene is type "intro" at 0. Use about ${n} scenes for ${duration.toFixed(1)} s, each lasting 2–5 s.
-- Put the "question" scene exactly at the word «عارف».
+- Put the "question" scene exactly at the word «${tokens.find(t => normalize(t.text) === normalize(lg.questionKey[0]))?.text || lg.questionKey[0]}».
 - "at" values are word indices from the list, strictly increasing. Every item "at" lies inside its scene.
 - Pick the template that makes the idea visible. Never use the same template 3 times in a row.
 - Icons are simple concrete English nouns (heart, lungs, cell, virus, sun, water, battery, clock, brain, fire).
@@ -108,7 +110,8 @@ const iconNoun = s => String(s ?? '').toLowerCase().replace(/[^a-z0-9 \-]/g, '')
  * Validate and repair a storyboard so the renderer can always draw it.
  * @returns {storyboard, fixes:string[]}
  */
-export function repairStoryboard(input, tokens, { title } = {}) {
+export function repairStoryboard(input, tokens, { title, lang = 'ar' } = {}) {
+  const [qa, qb] = L(lang).questionKey.map(normalize);
   const fixes = [];
   const n = tokens.length;
   const sb = input && typeof input === 'object' ? input : {};
@@ -166,10 +169,10 @@ export function repairStoryboard(input, tokens, { title } = {}) {
   scenes = scenes.filter((s, k) => k === 0 || s.type !== 'intro' || (s.type = 'concept', fixes.push(`extra intro at ${s.at} → concept`), true));
 
   // The series question gets its own scene at «عارف».
-  const qi = tokens.findIndex(t => normalize(t.text) === normalize('عارف') && tokens[t.i + 1] && normalize(tokens[t.i + 1].text).startsWith(normalize('ليه')));
+  const qi = tokens.findIndex((t, i) => normalize(t.text) === qa && tokens[i + 1] && normalize(tokens[i + 1].text).startsWith(qb));
   if (qi > 0) {
     const existing = scenes.find(s => s.type === 'question');
-    if (existing && Math.abs(existing.at - qi) <= 2) { if (existing.at !== qi) { existing.at = qi; fixes.push('question scene snapped to «عارف»'); } }
+    if (existing && Math.abs(existing.at - qi) <= 2) { if (existing.at !== qi) { existing.at = qi; fixes.push('question scene snapped to the series question'); } }
     else if (!existing) {
       if (!scenes.some(s => s.at === qi)) { scenes.push({ type: 'question', at: qi, template: 'ask', title: '', icon: '', items: [] }); fixes.push(`inserted question scene at ${qi}`); }
     }
@@ -284,11 +287,11 @@ export function lintStoryboard(sb, tokens, duration) {
   return issues;
 }
 
-export function reviewMessages({ storyboard, issues, tokens, duration }) {
+export function reviewMessages({ storyboard, issues, tokens, duration, lang = 'ar' }) {
   const words = tokens.map((t, i) => `${i}:${t.text}@${t.start.toFixed(1)}`).join(' ');
   return [
     { role: 'system', content: `You are a senior motion-design reviewer for a science-explainer reel. Improve weak scene choices in a storyboard JSON.
-Keep the same JSON schema and the word indices. Keep what already works. Only improve:
+Keep the same JSON schema and the word indices. Labels and titles stay in ${L(lang).labelLang}. Keep what already works. Only improve:
 - templates that don't make the idea visible (e.g. a number shown as cards instead of meter/chart, steps not shown as flow/cycle),
 - scenes that are too long (split them at a natural word),
 - missing or vague icons (use concrete English nouns),

@@ -11,6 +11,7 @@ import { renderVideo, getBrowser, getBrowserKind, closeBrowser } from './lib/ren
 import { Pipeline, STAGES, renderData } from './public/core/pipeline.js';
 import { elevenVoices } from './public/core/providers.js';
 import { licenseSummary } from './public/core/icons.js';
+import { lang } from './public/core/lang.js';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 loadDotEnv(ROOT);
@@ -51,7 +52,7 @@ const pipeline = new Pipeline({
   store,
   fetch: (...a) => fetch(...a),
   getSettings: async () => settings.get(),
-  loadStyleGuide: () => readFile(join(ROOT, 'references/script-style.md'), 'utf8'),
+  loadStyleGuide: lg => readFile(join(ROOT, 'references', lang(lg).styleFile), 'utf8'),
   loadIcons,
   decodeAudio: bytes => decodeAudio(bytes),
   emit,
@@ -141,7 +142,7 @@ async function api(req, res, url) {
 
   // /api/projects
   if (parts.length === 1) {
-    if (m === 'GET') return send(res, 200, { projects: (await store.list()).map(p => ({ id: p.id, topic: p.topic, title: p.title, length: p.length, updatedAt: p.updatedAt, stages: Object.fromEntries(STAGES.map(s => [s, p.stages[s].status])), render: p.render ? { file: p.render.file, duration: p.render.duration } : null, running: pipeline.isRunning(p.id) })) });
+    if (m === 'GET') return send(res, 200, { projects: (await store.list()).map(p => ({ id: p.id, topic: p.topic, lang: p.lang || 'ar', title: p.title, length: p.length, updatedAt: p.updatedAt, stages: Object.fromEntries(STAGES.map(s => [s, p.stages[s].status])), render: p.render ? { file: p.render.file, duration: p.render.duration } : null, running: pipeline.isRunning(p.id) })) });
     if (m === 'POST') {
       const b = await readJson(req);
       const p = await pipeline.create(b);

@@ -53,15 +53,16 @@ async function fillSettings() {
   await shot('settings');
 }
 
-async function runProject(tag, timeoutMs) {
+async function runProject(tag, timeoutMs, es = false) {
   await page.goto(`${BASE}/#/`);
   await page.waitForSelector('textarea');
   await page.fill('textarea', 'ليه بنتاوب لما نشوف حد بيتاوب؟');
+  if (es) { await page.click('text=Español'); await page.fill('textarea', '¿Por qué bostezamos?'); } else await page.click('text=العربية (مصري)');
   await page.click('.chip:has-text("10 ث")');
   await shot(tag + '-home');
   await page.click('text=✦ ابدأ الريل');
   await page.waitForSelector('.badge.review', { timeout: 30000 });
-  ok(await page.locator('#st-script >> text=عارف ليه؟').count() > 0, `${tag}: script ready for review`);
+  ok(await page.locator(`#st-script >> text=${es ? '¿Sabes por qué?' : 'عارف ليه؟'}`).count() > 0, `${tag}: ${es ? 'Spanish' : 'Arabic'} script ready for review`);
   await shot(tag + '-script-review');
   await page.click('.sticky-actions button.ok');
   const t0 = Date.now();
@@ -100,7 +101,7 @@ try {
     await page.waitForSelector('#mode:has-text("هاتف")');
     ok(true, 'phone mode active');
     await fillSettings();
-    await runProject('phone', 240000);
+    await runProject('phone', 240000, true);
     // pull the mp4 out of the page and check it
     const b64 = await page.evaluate(async () => { const v = document.querySelector('#st-render video'); const b = await (await fetch(v.src)).arrayBuffer(); let s = ''; const u = new Uint8Array(b); for (let i = 0; i < u.length; i += 32768) s += String.fromCharCode(...u.subarray(i, i + 32768)); return btoa(s); });
     const f = join(OUT, 'phone-reel.mp4');

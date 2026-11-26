@@ -12,6 +12,7 @@ import { getBrowser, closeBrowser } from '../lib/render-node.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const ALL = ['hero', 'ask', 'body', 'zoom', 'flow', 'cycle', 'timeline', 'chart', 'layers', 'cards', 'meter', 'checklist'];
+const LANG = process.argv.includes('--es') ? 'es' : 'ar';
 const want = process.argv.slice(2).filter(a => !a.startsWith('-'));
 const templates = want.length ? want : ALL;
 const PORT = 4370, MOCK = 4399, BASE = `http://127.0.0.1:${PORT}`;
@@ -46,15 +47,17 @@ try {
   const browser = await getBrowser();
   const page = await (await browser.newContext({ viewport: { width: 1080, height: 1920 } })).newPage();
   for (const tpl of templates) {
-    const p0 = await api('/api/projects', { method: 'POST', body: { topic: 'القلب', length: 20, approvals: { script: 'auto', voice: 'auto', timing: 'auto', storyboard: 'wait', render: 'auto' } } });
+    const p0 = await api('/api/projects', { method: 'POST', body: { topic: LANG === 'es' ? 'el corazón' : 'القلب', lang: LANG, length: 20, approvals: { script: 'auto', voice: 'auto', timing: 'auto', storyboard: 'wait', render: 'auto' } } });
     let p;
     for (let i = 0; i < 300; i++) { p = await api(`/api/projects/${p0.id}`); if (['review', 'error'].includes(p.stages.storyboard.status)) break; await sleep(100); }
     if (p.stages.storyboard.status !== 'review') throw new Error(tpl + ': pipeline failed ' + JSON.stringify(Object.values(p.stages).map(s => s.error)));
     const n = p.timing.tokens.length;
-    const qi = p.timing.tokens.findIndex(t => t.text.startsWith('عارف'));
+    const qi = p.timing.tokens.findIndex(t => t.text.startsWith('عارف') || /^¿?Sabes$/i.test(t.text));
+    const ES = { 'القلب بيدق ليه؟': '¿Por qué late el corazón?', 'القلب مضخة': 'Una bomba', 'بيضخ الدم': 'Mueve la sangre', 'الجسم': 'Cuerpo', 'الخلية': 'Célula', 'إزاي بيحصل؟': '¿Cómo pasa?', 'oxygen يدخل': 'Entra oxígeno', 'الدم يشيله': 'La sangre lo lleva', 'cells تاخد طاقة': 'Las células cargan', 'دورة الدم': 'Circulación', 'القلب': 'Corazón', 'الرئة': 'Pulmones', 'رجوع': 'Vuelta', 'الحكاية': 'La historia', 'أول ميكروسكوب': 'Primer microscopio', 'اكتشاف الخلية': 'La célula', 'دقات القلب': 'Latidos', 'طفل': 'Bebé', 'شخص بالغ': 'Adulto', 'رياضي': 'Atleta', 'طبقات الجلد': 'Capas de la piel', 'دهون': 'Grasa', 'الأدمة': 'Dermis', 'البشرة': 'Epidermis', 'وقت الراحة': 'En reposo', 'وقت الجري': 'Corriendo', 'دقة في الدقيقة': 'latidos por minuto', 'الخلاصة': 'En resumen', 'القلب عضلة': 'Es un músculo', 'بيشتغل لوحده': 'Funciona solo', 'كهربا جواه': 'Tiene electricidad' };
+    const tr = v => (LANG === 'es' && typeof v === 'string' ? ES[v] || v : v);
     const at = p.timing.tokens.findIndex(t => t.start >= p.timing.tokens[qi].start + 1.0), spec = ITEMS[tpl];
     const span = n - at;
-    const scene = { ...spec, at, template: tpl, items: (spec.items || []).map((it, j) => ({ ...it, at: at + 1 + Math.floor((j * (span - 4)) / Math.max(1, spec.items.length)) })) };
+    const scene = { ...spec, title: tr(spec.title), at, template: tpl, items: (spec.items || []).map((it, j) => ({ ...it, label: tr(it.label), at: at + 1 + Math.floor((j * (span - 4)) / Math.max(1, spec.items.length)) })) };
     const q = { type: 'question', at: qi, template: 'ask' };
     const scenes = tpl === 'hero' ? [{ ...scene, at: 0 }, q] : tpl === 'ask' ? [{ type: 'intro', at: 0, template: 'hero', icon: 'heart' }, q] : [{ type: 'intro', at: 0, template: 'hero', icon: 'heart', title: 'القلب' }, q, scene];
     p = await api(`/api/projects/${p0.id}/stages/storyboard/edit`, { method: 'POST', body: { storyboard: { scenes, accents: [[at + 1, 'accent', true], [at + 3, 'accent2']] } } });
@@ -69,7 +72,7 @@ try {
       const url = await page.evaluate(t => window.grab(t, 0.9), t);
       writeFileSync(join(dir, `f${String(i).padStart(2, '0')}.jpg`), Buffer.from(url.split(',')[1], 'base64'));
     }
-    spawnSync(ffmpegPath(), ['-v', 'error', '-y', '-framerate', '1', '-i', join(dir, 'f%02d.jpg'), '-vf', 'scale=360:640,tile=6x2', '-frames:v', '1', join(OUT, `${tpl}.jpg`)]);
+    spawnSync(ffmpegPath(), ['-v', 'error', '-y', '-framerate', '1', '-i', join(dir, 'f%02d.jpg'), '-vf', 'scale=360:640,tile=6x2', '-frames:v', '1', join(OUT, `${tpl}${LANG === 'es' ? '-es' : ''}.jpg`)]);
     console.log(`${tpl}: storyboard [${got}] → data/sheets/${tpl}.jpg`);
   }
 } finally { await closeBrowser(); server.kill(); mock?.close(); rmSync(DATA, { recursive: true, force: true }); }

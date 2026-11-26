@@ -83,9 +83,12 @@ export function alignTokens(tokens, words, { totalDuration } = {}) {
     let start = B[first[ti]].start;
     // If the first matched char is the first char of its timed word, snap to the word onset.
     const wi = B[first[ti]].w;
-    if (first[ti] === 0 || B[first[ti] - 1].w !== wi) start = words[wi].start;
+    const atWordStart = first[ti] === 0 || B[first[ti] - 1].w !== wi;
+    if (atWordStart) start = words[wi].start;
     const end = Math.max(B[last[ti]].end, start + 0.05);
-    return { ...base, start, end, weak: coverage < 0.6 };
+    // Onset inside a timed word without per-character times (two words glued by STT) is only an estimate.
+    const estimated = !atWordStart && !(Array.isArray(words[wi].chars) && words[wi].chars.length);
+    return { ...base, start, end, weak: coverage < 0.6 || estimated, ...(estimated ? { estimated: true } : {}) };
   });
 
   // Interpolate unmatched tokens between anchors, proportional to their length.

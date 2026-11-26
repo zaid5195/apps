@@ -2,6 +2,7 @@
 // Design canvas 720×1280, scaled to the real canvas (×1.5 → 1080×1920 for export).
 import { buildTimeline, sceneAt } from '../core/timeline.js';
 import { prng, clamp, hashString } from '../core/text.js';
+import { lang as langOf } from '../core/lang.js';
 
 export const C = {
   bg: '#0C1014', card: '#161C22', elev: '#202830', text: '#F4F3EE', sec: '#9AA5AE',
@@ -11,7 +12,7 @@ const TONE = { accent: C.accent, accent2: C.accent2, success: C.success, warning
 const W = 720, H = 1280;
 const CARD = { x: 36, y: 128, w: 648, h: 800, r: 38 };
 const CX = 360, CY = 548;
-const TYPE_LABEL = { intro: 'البداية', question: 'السؤال', concept: 'الفكرة', process: 'الخطوات', compare: 'مقارنة', stat: 'بالأرقام', recap: 'الخلاصة' };
+const TYPE_LABEL_AR = { intro: 'البداية', question: 'السؤال', concept: 'الفكرة', process: 'الخطوات', compare: 'مقارنة', stat: 'بالأرقام', recap: 'الخلاصة' };
 const TR = 0.42; // scene transition seconds
 
 // ---- easing ------------------------------------------------------------------------------------
@@ -38,6 +39,11 @@ function reveal(t, tShow, sceneT0, dur = 0.5) {
 
 export function createRenderer(canvas, data, { fontFamily = 'Reel' } = {}) {
   const ctx = canvas.getContext('2d', { alpha: false });
+  const LG = langOf(data.lang);
+  const rtl = LG.rtl, DIR = rtl ? 'rtl' : 'ltr';
+  const TYPE_LABEL = LG.typeLabel || TYPE_LABEL_AR;
+  const mx = x => (rtl ? x : W - x); // mirror horizontal positions for left-to-right languages
+  const A = a => (rtl || a === 'center' ? a : a === 'right' ? 'left' : 'right');
   const k = canvas.width / W;
   const FONT = `"${fontFamily}", "IBM Plex Sans Arabic", "Noto Sans Arabic", Tahoma, sans-serif`;
   const timeline = buildTimeline({ tokens: data.tokens, storyboard: data.storyboard, duration: data.duration });
@@ -115,7 +121,7 @@ export function createRenderer(canvas, data, { fontFamily = 'Reel' } = {}) {
     const ls = wrap(text, f, maxW, lines);
     ctx.save();
     ctx.globalAlpha *= alpha;
-    ctx.font = f; ctx.fillStyle = color; ctx.textAlign = align; ctx.direction = 'rtl'; ctx.textBaseline = 'middle';
+    ctx.font = f; ctx.fillStyle = color; ctx.textAlign = align; ctx.direction = DIR; ctx.textBaseline = 'middle';
     const total = (ls.length - 1) * size * lh;
     const y0 = valign === 'middle' ? y - total / 2 : valign === 'top' ? y + size * 0.5 : y - total - size * 0.5;
     ls.forEach((l, i) => ctx.fillText(l, x, y0 + i * size * lh));
@@ -191,7 +197,7 @@ export function createRenderer(canvas, data, { fontFamily = 'Reel' } = {}) {
     ctx.strokeStyle = 'rgba(255,255,255,0.07)'; ctx.lineWidth = 1.5; ctx.stroke();
     ctx.beginPath(); ctx.arc(px - 24, py, 6, 0, Math.PI * 2); ctx.fillStyle = C.accent; ctx.fill();
     glow(px - 24, py, 18, C.accent, 0.35 + 0.15 * Math.sin(t * 4));
-    ctx.font = f; ctx.fillStyle = C.text; ctx.textAlign = 'right'; ctx.direction = 'rtl'; ctx.textBaseline = 'middle';
+    ctx.font = f; ctx.fillStyle = C.text; ctx.textAlign = 'right'; ctx.direction = DIR; ctx.textBaseline = 'middle';
     ctx.fillText(data.series, px - 40, py + 1);
     // scene counter (top left)
     ctx.font = font(20, 500); ctx.fillStyle = C.sec; ctx.textAlign = 'left'; ctx.direction = 'ltr';
@@ -230,7 +236,7 @@ export function createRenderer(canvas, data, { fontFamily = 'Reel' } = {}) {
     const x = CARD.x + CARD.w - 46, y = CARD.y + 58;
     ctx.globalAlpha = a;
     rr(x - tw - 28, y - 16, tw + 28, 32, 16); ctx.fillStyle = hexA(C.accent, 0.14); ctx.fill();
-    ctx.font = f; ctx.fillStyle = C.accent; ctx.textAlign = 'right'; ctx.direction = 'rtl'; ctx.textBaseline = 'middle'; ctx.fillText(lab, x - 14, y + 1);
+    ctx.font = f; ctx.fillStyle = C.accent; ctx.textAlign = 'right'; ctx.direction = DIR; ctx.textBaseline = 'middle'; ctx.fillText(lab, x - 14, y + 1);
     ctx.restore();
     void k;
   }
@@ -255,6 +261,7 @@ export function createRenderer(canvas, data, { fontFamily = 'Reel' } = {}) {
       const runs = [];
       for (const wd of line) { const last = runs[runs.length - 1]; if (last && last.ltr && wd.ltr) last.words.push(wd); else runs.push({ ltr: wd.ltr, words: [wd] }); }
       const width = line.reduce((s, wd) => s + wd.w, 0) + space * (line.length - 1);
+      if (!rtl) { let lx = W / 2 - width / 2; return line.map(wd => { const o = { ...wd, x: lx, ltr: true }; lx += wd.w + space; return o; }); }
       let x = W / 2 + width / 2; // right edge
       const placed = [];
       for (const r of runs) {
@@ -337,12 +344,12 @@ export function createRenderer(canvas, data, { fontFamily = 'Reel' } = {}) {
     ctx.save();
     ctx.translate(CX, cy); const pulse = 1 + 0.03 * Math.sin((t - s.t0) * 5); ctx.scale(rv.s * pulse, rv.s * pulse);
     glow(0, 0, 220, C.accent, 0.25 * rv.a);
-    ctx.globalAlpha *= rv.a; ctx.font = font(300, 700); ctx.fillStyle = C.accent; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.direction = 'rtl';
-    ctx.fillText('؟', 0, 10);
+    ctx.globalAlpha *= rv.a; ctx.font = font(300, 700); ctx.fillStyle = C.accent; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.direction = DIR;
+    ctx.fillText(LG.qmark, 0, 10);
     ctx.restore();
     const w0 = data.tokens[s.at]?.start ?? s.t0;
     const ta = eo(ramp(t, w0, 0.35));
-    label('عارف ليه؟', CX, 740 + (1 - ta) * 20, { size: 66, alpha: 0.2 + 0.8 * ta });
+    label(LG.question, CX, 740 + (1 - ta) * 20, { size: rtl ? 66 : 58, alpha: 0.2 + 0.8 * ta });
   };
 
   function levelPos(n) {
@@ -398,9 +405,9 @@ export function createRenderer(canvas, data, { fontFamily = 'Reel' } = {}) {
       ctx.lineWidth = 2.5; ctx.strokeStyle = j === active ? C.accent : 'rgba(255,255,255,0.06)'; ctx.stroke();
       if (j === active) glow(0, 0, 260, C.accent, 0.08);
       ctx.restore();
-      badge(CX + 245 - 62, y + h / 2, 38, it.icon || s.icon, rv, { fill: C.card, color: j === active ? C.accent : C.accent2 });
-      label(it.label, CX + 245 - 120, y + h / 2, { size: 30, align: 'right', maxW: 330, alpha: rv.a });
-      label(String(j + 1), CX - 245 + 40, y + h / 2, { size: 26, color: C.sec, alpha: rv.a * 0.8 });
+      badge(mx(CX + 245 - 62), y + h / 2, 38, it.icon || s.icon, rv, { fill: C.card, color: j === active ? C.accent : C.accent2 });
+      label(it.label, mx(CX + 245 - 120), y + h / 2, { size: 30, align: A('right'), maxW: 330, alpha: rv.a });
+      label(String(j + 1), mx(CX - 245 + 40), y + h / 2, { size: 26, color: C.sec, alpha: rv.a * 0.8 });
     });
   };
 
@@ -443,8 +450,8 @@ export function createRenderer(canvas, data, { fontFamily = 'Reel' } = {}) {
       const cxs = right ? CX + 40 : CX - 40, w = 250;
       ctx.save(); ctx.globalAlpha *= rv.a;
       rr(right ? cxs : cxs - w, y - 46, w, 92, 22); ctx.fillStyle = C.elev; ctx.fill(); ctx.restore();
-      if (it.icon) drawIcon(it.icon, right ? cxs + w - 40 : cxs - 40, y, 44, rv.on ? C.accent : C.sec, rv.a);
-      label(it.label, right ? cxs + w - (it.icon ? 76 : 22) : cxs - (it.icon ? 76 : 22), y, { size: 25, align: 'right', maxW: it.icon ? 160 : 210, alpha: rv.a });
+      if (it.icon) drawIcon(it.icon, rtl ? (right ? cxs + w - 40 : cxs - 40) : (right ? cxs + w - 40 : cxs - 40), y, 44, rv.on ? C.accent : C.sec, rv.a);
+      label(it.label, rtl ? (right ? cxs + w - (it.icon ? 76 : 22) : cxs - (it.icon ? 76 : 22)) : (right ? cxs + 22 : cxs - w + 22), y, { size: 25, align: rtl ? 'right' : 'left', maxW: it.icon ? 160 : 210, alpha: rv.a });
       if (it.value != null) label(String(it.value), right ? CX - 30 : CX + 30, y, { size: 30, color: C.accent, align: right ? 'right' : 'left', alpha: rv.a, maxW: 260 });
     });
   };
@@ -459,7 +466,7 @@ export function createRenderer(canvas, data, { fontFamily = 'Reel' } = {}) {
     if (s.unit) label(s.unit, x0, top - 30, { size: 22, color: C.sec, align: 'left', alpha: eo(ramp(t, s.t0, 0.4)) });
     const best = its.reduce((b, it, j) => ((it.value || 0) > (its[b].value || 0) ? j : b), 0);
     its.forEach((it, j) => {
-      const cx = x1 - ((j + 0.5) * (x1 - x0)) / n; // first item on the right (RTL)
+      const cx = rtl ? x1 - ((j + 0.5) * (x1 - x0)) / n : x0 + ((j + 0.5) * (x1 - x0)) / n; // reading order
       const p = eio(ramp(t, it.t, 0.7));
       const hFull = ((it.value || 0) / max) * (base - top), hh = Math.max(4, hFull * p);
       const ghostA = 0.12 * eo(ramp(t, s.t0, 0.35));
@@ -498,8 +505,8 @@ export function createRenderer(canvas, data, { fontFamily = 'Reel' } = {}) {
       ctx.fillStyle = rv.on ? hexA(col, 0.22) : 'rgba(255,255,255,0.03)'; ctx.fillRect(CX - w / 2, y, w, h);
       ctx.strokeStyle = hexA(col, 0.9); ctx.lineWidth = 2; ctx.strokeRect(CX - w / 2, y, w, h);
       ctx.restore();
-      drawIcon(it.icon || s.icon, CX + w / 2 - 44, y + h / 2 + dy, 46, rv.on ? C.text : C.sec, rv.a);
-      label(it.label, CX + w / 2 - 86, y + h / 2 + dy, { size: 28, align: 'right', maxW: 330, alpha: rv.a, lines: 1 });
+      drawIcon(it.icon || s.icon, mx(CX + w / 2 - 44), y + h / 2 + dy, 46, rv.on ? C.text : C.sec, rv.a);
+      label(it.label, mx(CX + w / 2 - 86), y + h / 2 + dy, { size: 28, align: A('right'), maxW: 330, alpha: rv.a, lines: 1 });
     });
   };
 
@@ -509,8 +516,8 @@ export function createRenderer(canvas, data, { fontFamily = 'Reel' } = {}) {
     const top = topY(s);
     let cells;
     if (n === 1) cells = [[CX, CY + 10, 440, 470]];
-    else if (n === 2) cells = [[CX + 156, CY + 10, 284, 420], [CX - 156, CY + 10, 284, 420]];
-    else { const cw = 284, ch = n === 3 ? 270 : 280, y0 = top + 40 + ch / 2; cells = [[CX + 156, y0, cw, ch], [CX - 156, y0, cw, ch], [n === 3 ? CX : CX + 156, y0 + ch + 30, cw, ch], [CX - 156, y0 + ch + 30, cw, ch]].slice(0, n); }
+    else if (n === 2) cells = [[mx(CX + 156), CY + 10, 284, 420], [mx(CX - 156), CY + 10, 284, 420]];
+    else { const cw = 284, ch = n === 3 ? 270 : 280, y0 = top + 40 + ch / 2; cells = [[mx(CX + 156), y0, cw, ch], [mx(CX - 156), y0, cw, ch], [n === 3 ? CX : mx(CX + 156), y0 + ch + 30, cw, ch], [mx(CX - 156), y0 + ch + 30, cw, ch]].slice(0, n); }
     its.forEach((it, j) => {
       const [x, y, w, h] = cells[j], rv = reveal(t, it.t, s.t0);
       const col = vs ? (j ? C.accent2 : C.accent) : j % 2 ? C.accent2 : C.accent;
@@ -621,20 +628,20 @@ export function createRenderer(canvas, data, { fontFamily = 'Reel' } = {}) {
 
   T.checklist = (s, t) => {
     const its = items(s), n = its.length;
-    label(s.title || 'الخلاصة', CX, 238, { size: 40, alpha: eo(ramp(t, s.t0, 0.4)) });
+    label(s.title || LG.recap, CX, 238, { size: 40, alpha: eo(ramp(t, s.t0, 0.4)) });
     ctx.fillStyle = C.accent; const bw = 80 * eo(ramp(t, s.t0 + 0.2, 0.4)); rr(CX - bw / 2, 272, bw, 5, 2.5); ctx.fill();
     const h = 104, gap = 26, y0 = 330 + (4 - n) * 50;
     its.forEach((it, j) => {
       const y = y0 + j * (h + gap), rv = reveal(t, it.t, s.t0);
       ctx.save(); ctx.globalAlpha *= rv.a; ctx.translate(CX, y + h / 2); ctx.scale(rv.s, rv.s);
       rr(-275, -h / 2, 550, h, 26); ctx.fillStyle = C.elev; ctx.fill(); ctx.restore();
-      const cx = CX + 275 - 56, cy = y + h / 2;
+      const cx = mx(CX + 275 - 56), cy = y + h / 2;
       ctx.save(); ctx.globalAlpha *= rv.a;
       ctx.beginPath(); ctx.arc(cx, cy, 26, 0, Math.PI * 2); ctx.fillStyle = rv.on ? C.success : 'rgba(255,255,255,0.06)'; ctx.fill(); ctx.restore();
       drawOn([[cx - 11, cy + 1], [cx - 3, cy + 9], [cx + 12, cy - 8]], eo(ramp(t, it.t + 0.1, 0.3)), C.bg, 5, false);
       if (rv.on) glow(cx, cy, 60, C.success, 0.25 * rv.a);
-      label(it.label, cx - 50, cy, { size: 30, align: 'right', maxW: 400, alpha: rv.a, lines: 1 });
-      if (it.icon) drawIcon(it.icon, CX - 275 + 50, cy, 44, rv.on ? C.accent : C.sec, rv.a * 0.9);
+      label(it.label, rtl ? cx - 50 : cx + 50, cy, { size: 30, align: A('right'), maxW: 400, alpha: rv.a, lines: 1 });
+      if (it.icon) drawIcon(it.icon, mx(CX - 275 + 50), cy, 44, rv.on ? C.accent : C.sec, rv.a * 0.9);
     });
   };
 

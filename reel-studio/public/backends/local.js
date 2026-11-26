@@ -4,6 +4,7 @@ import { Pipeline, STAGES, renderData } from '../core/pipeline.js';
 import { DEFAULT_SETTINGS, SECRET_PATHS, deepMerge, getPath, setPath, mask } from '../core/defaults.js';
 import { elevenVoices } from '../core/providers.js';
 import { decodeWav } from '../core/audio.js';
+import { lang } from '../core/lang.js';
 import { encodeReel, decodeAudioBrowser } from './encode.js';
 
 const DB = 'reel-studio', VER = 1;
@@ -55,7 +56,7 @@ export class LocalBackend {
       store,
       fetch: (...a) => fetch(...a),
       getSettings: () => this._settings(),
-      loadStyleGuide: () => fetch(new URL('../references/script-style.md', import.meta.url)).then(r => { if (!r.ok) throw new Error('style guide missing'); return r.text(); }),
+      loadStyleGuide: lg => fetch(new URL('../references/' + lang(lg).styleFile, import.meta.url)).then(r => { if (!r.ok) throw new Error('style guide missing'); return r.text(); }),
       loadIcons: () => (this.icons ??= fetch(new URL('../assets/icons/icons.json', import.meta.url)).then(r => r.json())),
       decodeAudio: bytes => decodeAudioBrowser(bytes),
       emit: (id, ev) => { for (const cb of this.subs.get(id) || []) cb(ev); },
@@ -103,7 +104,7 @@ export class LocalBackend {
   }
   async voices() { const s = await this._settings(); return { voices: await elevenVoices({ ...s.eleven }) }; }
   async listProjects() {
-    return { projects: (await store.list()).map(p => ({ id: p.id, topic: p.topic, title: p.title, length: p.length, updatedAt: p.updatedAt, stages: Object.fromEntries(STAGES.map(s => [s, p.stages[s].status])), render: p.render, running: this.pipeline.isRunning(p.id) })) };
+    return { projects: (await store.list()).map(p => ({ id: p.id, topic: p.topic, lang: p.lang || 'ar', title: p.title, length: p.length, updatedAt: p.updatedAt, stages: Object.fromEntries(STAGES.map(s => [s, p.stages[s].status])), render: p.render, running: this.pipeline.isRunning(p.id) })) };
   }
   async createProject(b) {
     const p = await this.pipeline.create(b);
