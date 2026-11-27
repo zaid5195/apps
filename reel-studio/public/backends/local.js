@@ -1,7 +1,7 @@
 // Phone mode: the whole studio runs inside the browser. Projects and files live in IndexedDB,
 // APIs are called directly from the device, rendering uses WebCodecs.
 import { Pipeline, STAGES, renderData } from '../core/pipeline.js';
-import { DEFAULT_SETTINGS, SECRET_PATHS, deepMerge, getPath, setPath, mask } from '../core/defaults.js';
+import { DEFAULT_SETTINGS, SECRET_PATHS, deepMerge, getPath, setPath, mask, maskBackups, mergeBackups } from '../core/defaults.js';
 import { elevenVoices } from '../core/providers.js';
 import { listModels } from '../core/llm.js';
 import { decodeWav } from '../core/audio.js';
@@ -87,6 +87,7 @@ export class LocalBackend {
     for (const p of SECRET_PATHS) { setPath(out, p, mask(getPath(s, p))); out.has[p[0]] = !!getPath(s, p); }
     const f = await idb.get('kv', 'font');
     out.fontFile = f ? f.name : '';
+    out.llmBackups = maskBackups(s.llmBackups);
     out.envLocked = [];
     return out;
   }
@@ -98,6 +99,7 @@ export class LocalBackend {
       if (typeof v === 'string' && v.includes('••••')) setPath(next, p, getPath(cur, p) || '');
       else if (typeof v === 'string') setPath(next, p, v.trim());
     }
+    if (patch && 'llmBackups' in patch) next.llmBackups = mergeBackups(patch.llmBackups, cur.llmBackups);
     delete next.has; delete next.envLocked; delete next.fontFile;
     await idb.put('kv', 'settings', next);
     return this.getSettings();
@@ -110,7 +112,7 @@ export class LocalBackend {
   batch(topics, options) { return this.pipeline.batch(topics, options); }
   async batchState() { return this.pipeline.queueState(); }
   setStyle(id, s) { return this.pipeline.setStyle(id, s); }
-  async models() { const s = await this._settings(); return { models: await listModels({ ...s.llm }) }; }
+  async models(backup) { const s = await this._settings(); const cfg = backup ? (s.llmBackups || []).find(b => b.id === backup) : s.llm; if (!cfg) throw new Error('Unknown provider'); return { models: await listModels({ ...cfg }) }; }
   async voices() { const s = await this._settings(); return { voices: await elevenVoices({ ...s.eleven }) }; }
   async listProjects() {
     return { projects: (await store.list()).map(p => ({ id: p.id, topic: p.topic, lang: p.lang || 'ar', title: p.title, length: p.length, updatedAt: p.updatedAt, stages: Object.fromEntries(STAGES.map(s => [s, p.stages[s].status])), render: p.render, running: this.pipeline.isRunning(p.id) })) };

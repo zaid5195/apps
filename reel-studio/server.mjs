@@ -145,7 +145,10 @@ async function api(req, res, url) {
   }
   if (parts[0] === 'models' && m === 'GET') {
     const s = settings.get();
-    return send(res, 200, { models: await listModels({ ...s.llm }) });
+    const bid = url.searchParams.get('backup');
+    const cfg = bid ? (s.llmBackups || []).find(b => b.id === bid) : s.llm;
+    if (!cfg) return send(res, 404, { error: 'Unknown provider' });
+    return send(res, 200, { models: await listModels({ ...cfg }) });
   }
   if (parts[0] === 'fonts' && m === 'GET') return send(res, 200, { custom: await customFont(), folder: settings.get().fontFolder });
   if (parts[0] === 'icons' && m === 'GET') return send(res, 200, { sets: licenseSummary(await loadIcons()) });

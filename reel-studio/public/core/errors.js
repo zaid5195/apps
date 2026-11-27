@@ -7,6 +7,13 @@ export const KEY_LINKS = [
   [/elevenlabs/, 'ElevenLabs', 'https://elevenlabs.io/app/developers/'],
   [/deepgram/, 'Deepgram', 'https://console.deepgram.com/'],
   [/127\.0\.0\.1:31415|localhost:31415/, 'FreeLLMAPI', 'https://github.com/tashfeenahmed/freellmapi'],
+  [/cerebras\.ai/, 'Cerebras', 'https://cloud.cerebras.ai'],
+  [/mistral\.ai/, 'Mistral', 'https://console.mistral.ai/api-keys'],
+  [/deepseek\.com/, 'DeepSeek', 'https://platform.deepseek.com/api_keys'],
+  [/nvidia\.com/, 'NVIDIA NIM', 'https://build.nvidia.com'],
+  [/sambanova\.ai/, 'SambaNova', 'https://cloud.sambanova.ai/apis'],
+  [/models\.github\.ai|models\.inference\.ai\.azure\.com/, 'GitHub Models', 'https://github.com/settings/tokens'],
+  [/together\.(xyz|ai)/, 'Together AI', 'https://api.together.ai/settings/api-keys'],
 ];
 export const isLocalUrl = u => /^https?:\/\/(127\.\d+\.\d+\.\d+|localhost|\[::1\])(:|\/|$)/i.test(String(u || '').trim());
 export function providerOf(baseUrl) {
@@ -59,6 +66,9 @@ export function providerFromKey(key) {
   if (/^AIza[0-9A-Za-z_\-]{20,}$/.test(k)) return { name: 'Gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-flash-latest' };
   if (/^gsk_/.test(k)) return { name: 'Groq', baseUrl: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' };
   if (/^sk-or-/.test(k)) return { name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', model: 'openrouter/auto' };
+  if (/^csk-/.test(k)) return { name: 'Cerebras', baseUrl: 'https://api.cerebras.ai/v1', model: 'llama-3.3-70b' };
+  if (/^nvapi-/.test(k)) return { name: 'NVIDIA NIM', baseUrl: 'https://integrate.api.nvidia.com/v1', model: 'meta/llama-3.3-70b-instruct' };
+  if (/^(github_pat_|ghp_)/.test(k)) return { name: 'GitHub Models', baseUrl: 'https://models.github.ai/inference', model: 'openai/gpt-4.1-mini' };
   return null;
 }
 export const looksLikeKey = v => { const s = String(v || '').trim(); return !!s && !/[:/\s.]/.test(s.slice(0, 12)) && /^[A-Za-z0-9_\-]{20,}$/.test(s); };

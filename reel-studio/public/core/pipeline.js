@@ -11,6 +11,7 @@ import { resolveStoryboardIcons } from './icons.js';
 import { buildTimeline, videoDuration, speechEnd, TAIL } from './timeline.js';
 import { mixAudio, encodeWav } from './audio.js';
 import { LANGS, lang as L } from './lang.js';
+import { presetById } from './defaults.js';
 import { friendly, providerOf, isLocalUrl, missingKey, fixBaseUrl, providerFromKey, looksLikeKey } from './errors.js';
 
 export const STAGES = ['script', 'voice', 'timing', 'storyboard', 'render'];
@@ -45,7 +46,7 @@ export function renderData(p, settings = {}, aspect = '9:16') {
   const style = { ...DEFAULT_STYLE, ...(p.style || {}) };
   return {
     v: 1, id: p.id, fps: FPS, aspect,
-    style: { ...style, handle: settings.handle ?? '' },
+    style: { ...style, handle: (style.handle ?? '').trim() || settings.handle || '', followText: (style.endFollow || settings.endFollow || '').trim(), commentText: (style.endComment || settings.endComment || '').trim() },
     endAt: speechEnd(tokens, p.voice?.duration) + TAIL,
     duration: videoDuration(tokens, p.voice?.duration, { endScreen: style.endScreen }),
     title: p.script?.title || p.title || p.topic, lang: p.lang || 'ar',
@@ -141,6 +142,7 @@ export class Pipeline {
     if (Number.isFinite(+style.musicLevel)) s.musicLevel = Math.max(0, Math.min(2, +style.musicLevel));
     if (['classic', 'word', 'box'].includes(style.captions)) s.captions = style.captions;
     for (const k of ['endScreen', 'hook']) if (typeof style[k] === 'boolean') s[k] = style[k];
+    for (const [k, max] of [['handle', 40], ['endFollow', 70], ['endComment', 120]]) if (typeof style[k] === 'string') s[k] = style[k].trim().slice(0, max);
     if (Array.isArray(style.formats)) { const f = style.formats.filter(x => FORMATS[x]); s.formats = f.length ? f : ['9:16']; }
     p.style = s;
     if (p.stages.render.status === 'done' || p.stages.render.status === 'review') { p.stages.render.status = 'idle'; this.log(p, 'render', 'Style changed — render again'); }
@@ -301,7 +303,7 @@ export class Pipeline {
    * One LLM call. If the provider says the model is gone/unknown (e.g. Gemini retired a model),
    * switch to the model it suggests — or the best one from /models — save it, and retry once.
    */
-  async llm(settings, ctx, { messages, temperature }) {
+  async llmOne(settings, ctx, { messages, temperature }, primary = true) {
     const call = (model = settings.llm.model) => chatStream({ ...settings.llm, model, messages, temperature, signal: ctx.signal, onDelta: ctx.llm, fetchImpl: this.env.fetch, log: ctx.log });
     try { return await call(); } catch (e) {
       if (isBusy(e) && !ctx.signal?.aborted && e.status !== 429) {
@@ -327,9 +329,41 @@ export class Pipeline {
       if (!next || next === old) throw e;
       ctx.log(`الموديل «${old}» مش متاح — بدّلناه لـ «${next}»${this.env.updateSettings ? ' وحفظناه في الإعدادات' : ''}`);
       settings.llm.model = next;
-      try { await this.env.updateSettings?.({ llm: { model: next } }); } catch {}
+      if (primary) { try { await this.env.updateSettings?.({ llm: { model: next } }); } catch {} }
       return await call();
     }
+  }
+
+  /** Main LLM first, then every enabled backup provider (Settings → backup providers) until one answers. */
+  async llm(settings, ctx, args) {
+    const chain = this.llmChain(settings);
+    if (!chain.length) this.checkLlm(settings, ctx.log); // throws the "missing key" message
+    let last = null;
+    for (const [i, c] of chain.entries()) {
+      const name = c.name || providerOf(c.baseUrl).name;
+      if (i > 0) { ctx.log(`🔁 نجرّب المزوّد الاحتياطي «${name}» (${c.model || 'auto'})`); ctx.llm?.(null, ''); }
+      try { return await this.llmOne({ ...settings, llm: { temperature: settings.llm.temperature, ...c } }, ctx, args, c.primary); }
+      catch (e) {
+        if (ctx.signal?.aborted || e?.name === 'AbortError') throw e;
+        last = friendly(e, { name, link: c.keyLink || providerOf(c.baseUrl).link, local: isLocalUrl(c.baseUrl) });
+        if (i < chain.length - 1) ctx.log(`«${name}» ما نفعش: ${String(last.message).slice(0, 120)}`);
+      }
+    }
+    throw last;
+  }
+
+  /** Usable providers in order: the main one (unless it has no key) + enabled backups with a key. */
+  llmChain(settings) {
+    const chain = [];
+    if (!settings.llm._skip) chain.push({ ...settings.llm, primary: true });
+    for (const b of settings.llmBackups || []) {
+      if (b.enabled === false || !b.baseUrl) continue;
+      const url = fixBaseUrl(b.baseUrl).url;
+      if (!b.apiKey && !isLocalUrl(url)) continue;
+      const pr = presetById(b.preset);
+      chain.push({ baseUrl: url, apiKey: b.apiKey, model: b.model || pr?.model || 'auto', name: b.name || pr?.name || providerOf(url).name, keyLink: pr?.keyLink, primary: false });
+    }
+    return chain;
   }
 
   /** Fail fast (before any call) when an online LLM has no key. */
@@ -345,6 +379,12 @@ export class Pipeline {
     if (fx.note) { log(fx.note); settings.llm.baseUrl = fx.url; }
     if (/generativelanguage/.test(settings.llm.baseUrl) && (!settings.llm.model || settings.llm.model === 'auto')) settings.llm.model = 'gemini-flash-latest';
     const { baseUrl, apiKey } = settings.llm;
+    const unusable = !String(baseUrl || '').trim() || (!apiKey && !isLocalUrl(baseUrl));
+    if (unusable && this.llmChain({ ...settings, llm: { ...settings.llm, _skip: true } }).length) {
+      settings.llm._skip = true; // main provider has no key, but a backup does
+      log('المزوّد الأساسي من غير مفتاح — هنستعمل المزوّدين الاحتياطيين');
+      return;
+    }
     if (!String(baseUrl || '').trim()) throw missingKey('LLM (Base URL)', '');
     if (!apiKey && !isLocalUrl(baseUrl)) { const pr = providerOf(baseUrl); throw missingKey(pr.name, pr.link); }
   }

@@ -2,7 +2,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { DEFAULT_SETTINGS as DEFAULTS, deepMerge, getPath as get, setPath as set, mask } from '../public/core/defaults.js';
+import { DEFAULT_SETTINGS as DEFAULTS, deepMerge, getPath as get, setPath as set, mask, maskBackups, mergeBackups } from '../public/core/defaults.js';
 export { DEFAULTS };
 const SECRET = [['llm', 'apiKey'], ['eleven', 'apiKey'], ['deepgram', 'apiKey'], ['gemini', 'apiKey']];
 // Environment variables. Base URLs from the environment win (handy for tests / mocks); keys are fallbacks.
@@ -41,6 +41,7 @@ export class Settings {
     const out = structuredClone(s);
     out.has = {};
     for (const path of SECRET) { set(out, path, mask(get(s, path))); out.has[path[0]] = !!get(s, path); }
+    out.llmBackups = maskBackups(s.llmBackups);
     out.envLocked = Object.entries(ENV_URLS).filter(([e]) => process.env[e]).map(([, p]) => p.join('.'));
     return out;
   }
@@ -53,6 +54,7 @@ export class Settings {
       if (typeof v === 'string' && v.includes('••••')) set(next, path, get(cur, path) || '');
       else if (typeof v === 'string') set(next, path, v.trim());
     }
+    if (patch && 'llmBackups' in patch) next.llmBackups = mergeBackups(patch.llmBackups, cur.llmBackups);
     delete next.has; delete next.envLocked;
     writeFileSync(this.file, JSON.stringify(next, null, 2));
     return this.public();
