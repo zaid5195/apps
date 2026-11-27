@@ -3,7 +3,7 @@
 import { spawn } from 'node:child_process';
 import { cpus } from 'node:os';
 import { join } from 'node:path';
-import { stat } from 'node:fs/promises';
+import { stat, writeFile } from 'node:fs/promises';
 import { ffmpegPath } from './media.mjs';
 
 let browserPromise = null;
@@ -47,12 +47,13 @@ export async function closeBrowser() {
  * @param o.outPath  output mp4
  * @param o.baseUrl  http://127.0.0.1:4301
  */
-export async function renderVideo({ data, wavPath, outPath, baseUrl, font, signal, onProgress, onFrame, log = () => {} }) {
+export async function renderVideo({ data, wavPath, outPath, coverPath, baseUrl, font, signal, onProgress, onFrame, log = () => {} }) {
   const ff = ffmpegPath();
   if (!ff) throw new Error('ffmpeg not found — run "npm run setup"');
   const browser = await getBrowser();
   const nPages = Math.max(1, Math.min(4, Math.floor(cpus().length / 2) || 1));
-  const context = await browser.newContext({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 1 });
+  const [VW, VH] = { '1:1': [1080, 1080], '16:9': [1920, 1080] }[data.aspect] || [1080, 1920];
+  const context = await browser.newContext({ viewport: { width: VW, height: VH }, deviceScaleFactor: 1 });
   const pages = [];
   let ffp;
   try {
@@ -92,6 +93,8 @@ export async function renderVideo({ data, wavPath, outPath, baseUrl, font, signa
     ffp.stdin.end();
     await closed;
     const st = await stat(outPath);
+    const cover = coverPath ? await pages[0].evaluate(() => window.grabCover(0.92)) : null;
+    if (cover) await writeFile(coverPath, Buffer.from(cover.split(',')[1], 'base64'));
     return { size: st.size, renderer: `playwright(${browserKind})+ffmpeg` };
   } catch (e) {
     try { ffp?.kill('SIGKILL'); } catch {}

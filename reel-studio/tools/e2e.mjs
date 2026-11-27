@@ -175,6 +175,35 @@ try {
   copyFileSync(mp4, keep);
   console.log(`→ ${keep}`);
 
+  // ---- new features: style / formats / cover / post caption
+  ok(!!p.publish?.caption && p.publish.hashtags.every(h => /^#\S+$/.test(h)), `post caption + ${p.publish?.hashtags?.length} hashtags: ${p.publish?.hashtags?.slice(0, 4).join(' ')}`);
+  ok(!!p.render.cover && existsSync(join(DATA, 'projects', id, 'cover.jpg')), 'cover.jpg rendered');
+  await api(`/api/projects/${id}/style`, { method: 'POST', body: { formats: ['9:16', '1:1', '16:9'], captions: 'box', music: 'upbeat' } });
+  await api(`/api/projects/${id}/stages/render/rerun`, { method: 'POST' });
+  for (let i = 0; i < 600; i++) { p = await api(`/api/projects/${id}`); if (['done', 'error'].includes(p.stages.render.status) && !p.running) break; await sleep(400); }
+  const dims = f => (spawnSync(ff, ['-hide_banner', '-i', join(DATA, 'projects', id, f)], { encoding: 'utf8' }).stderr.match(/, (\d+x\d+)/) || [])[1];
+  ok(p.stages.render.status === 'done' && p.render.files.length === 3, `3 formats: ${p.render.files?.map(f => `${f.aspect}=${dims(f.file)}`).join(' · ')}`);
+  ok(dims('reel-1x1.mp4') === '1080x1080' && dims('reel-16x9.mp4') === '1920x1080', '1:1 is 1080×1080, 16:9 is 1920×1080');
+  for (const [f, name] of [['reel.mp4', '9x16'], ['reel-1x1.mp4', '1x1'], ['reel-16x9.mp4', '16x9'], ['cover.jpg', 'cover']]) copyFileSync(join(DATA, 'projects', id, f), join(ROOT, 'data', 'e2e', `styled-${name}.${f.split('.').pop()}`));
+  // ideas
+  const ideas = await api('/api/ideas', { method: 'POST', body: { lang: LANG, hint: 'الجسم' } });
+  ok(ideas.ideas.length === 10 && ideas.ideas[0].topic, `ideas: ${ideas.ideas.length} (e.g. «${ideas.ideas[0].topic}»)`);
+  // free Gemini voice + estimated timings, through a 2-topic batch (and a retired TTS model)
+  await api('/api/settings', { method: 'PUT', body: { eleven: { apiKey: '' }, deepgram: { apiKey: '' }, gemini: { apiKey: 'g-test-key', baseUrl: `http://127.0.0.1:${MOCK}/v1beta`, ttsModel: 'retired-tts' } } });
+  const bt = await api('/api/batch', { method: 'POST', body: { topics: [LANG === 'es' ? '¿Por qué soñamos?' : 'ليه بنحلم؟', LANG === 'es' ? '¿Por qué el cielo es azul?' : 'ليه السما زرقا؟'], options: { lang: LANG, length: 10, voiceSource: 'gemini', style: { captions: 'word', music: 'suspense' } } } });
+  let bps = [];
+  for (let i = 0; i < 900; i++) { bps = await Promise.all(bt.queued.map(q => api(`/api/projects/${q}`))); if (bps.every(b => ['done', 'error'].includes(b.stages.render.status) || Object.values(b.stages).some(s => s.status === 'error'))) break; await sleep(400); }
+  ok(bps.every(b => b.stages.render.status === 'done'), `batch: ${bps.length} reels finished one after another (${bps.map(b => Object.values(b.stages).map(s => s.status[0]).join('')).join(' / ')})`);
+  ok(bps.every(b => b.voice?.provider === 'gemini' && b.timing?.provider === 'estimate'), 'Gemini voice + estimated timings (no transcription key)');
+  ok((await api('/api/settings')).gemini.ttsModel === 'mock-tts-2', 'retired Gemini TTS model → switched and saved');
+  const gw = (await fetch(`http://127.0.0.1:${MOCK}/mock/last-gemini-words`).then(r => r.json())).words;
+  const lastP = bps[bps.length - 1];
+  if (gw && gw.length === lastP.timing.tokens.length) {
+    const ge = lastP.timing.tokens.map((t, i) => Math.abs(t.start - gw[i].start)).sort((a, b) => a - b);
+    ok(ge[Math.floor(ge.length / 2)] < 0.12, `estimated timing error: median ${Math.round(ge[Math.floor(ge.length / 2)] * 1000)} ms, 90% ≤ ${Math.round(ge[Math.floor(ge.length * 0.9)] * 1000)} ms`);
+  } else ok(false, `gemini words ${gw?.length} vs tokens ${lastP.timing.tokens.length}`);
+  copyFileSync(join(DATA, 'projects', lastP.id, 'reel.mp4'), join(ROOT, 'data', 'e2e', 'gemini-voice.mp4'));
+
   // ---- rerun + cancel
   await api(`/api/projects/${id}/stages/storyboard/rerun`, { method: 'POST' });
   await sleep(150);

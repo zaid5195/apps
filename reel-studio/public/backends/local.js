@@ -62,12 +62,14 @@ export class LocalBackend {
       decodeAudio: bytes => decodeAudioBrowser(bytes),
       updateSettings: patch => this.saveSettings(patch),
       emit: (id, ev) => { for (const cb of this.subs.get(id) || []) cb(ev); },
-      render: async ({ project, data, wav, signal, onProgress, onFrame, log }) => {
+      render: async ({ project, data, file = 'reel.mp4', cover = false, wav, signal, onProgress, onFrame, log }) => {
         const mix = decodeWav(wav);
         const font = await this._font();
-        const blob = await encodeReel({ data, mix, font, signal, onProgress, onFrame, log });
-        await store.writeFile(project.id, 'reel.mp4', blob);
-        return { file: 'reel.mp4', size: blob.size, renderer: 'browser(WebCodecs)' };
+        const out = await encodeReel({ data, mix, font, signal, onProgress, onFrame, log, cover });
+        const blob = cover ? out.video : out;
+        await store.writeFile(project.id, file, blob);
+        if (cover && out.cover) await store.writeFile(project.id, 'cover.jpg', out.cover);
+        return { file, size: blob.size, renderer: 'browser(WebCodecs)', cover: cover && out.cover ? 'cover.jpg' : null };
       },
     });
   }
@@ -104,6 +106,10 @@ export class LocalBackend {
     if (!file) await idb.del('kv', 'font'); else await idb.put('kv', 'font', { name: file.name, blob: file });
     return this.getSettings();
   }
+  ideas(b) { return this.pipeline.ideas(b); }
+  batch(topics, options) { return this.pipeline.batch(topics, options); }
+  async batchState() { return this.pipeline.queueState(); }
+  setStyle(id, s) { return this.pipeline.setStyle(id, s); }
   async models() { const s = await this._settings(); return { models: await listModels({ ...s.llm }) }; }
   async voices() { const s = await this._settings(); return { voices: await elevenVoices({ ...s.eleven }) }; }
   async listProjects() {
@@ -136,15 +142,15 @@ export class LocalBackend {
   }
   async setVoiceSource(id, { source, voiceId }) {
     const p = await this.pipeline.get(id);
-    p.voiceSource = source === 'upload' ? 'upload' : 'tts';
+    p.voiceSource = ['upload', 'gemini'].includes(source) ? source : 'tts';
     if (voiceId !== undefined) p.voiceId = voiceId;
     if (p.stages.voice.status !== 'idle') this.pipeline.resetFrom(p, 'voice');
     await this.pipeline.save(p);
     return p;
   }
-  async renderData(id) {
+  async renderData(id, aspect = '9:16') {
     const p = await this.pipeline.get(id);
-    return { data: renderData(p, await this._settings()), font: await this._font(), audio: p.voice ? await this.fileUrl(id, p.voice.file) : null };
+    return { data: renderData(p, await this._settings(), aspect), font: await this._font(), audio: p.voice ? await this.fileUrl(id, p.voice.file) : null };
   }
   async fileUrl(id, name) {
     const b = await store.getBlob(id, name);

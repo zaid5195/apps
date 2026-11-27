@@ -122,7 +122,9 @@ function chat(req, res, body) {
   const sys = body.messages.find(m => m.role === 'system')?.content || '';
   const user = [...body.messages].reverse().find(m => m.role === 'user')?.content || '';
   let answer;
-  if (/head writer/.test(sys)) answer = /must have about/.test(user) ? scriptAnswer(body.messages.find(m => m.role === 'user').content) : scriptAnswer(user);
+  if (/producer of a viral/.test(sys)) answer = JSON.stringify({ ideas: Array.from({ length: 10 }, (_, i) => ({ topic: /Spanish/.test(sys) ? `¿Por qué pasa la cosa ${i + 1}?` : `ليه بيحصل الموضوع رقم ${i + 1}؟`, hook: 'hook ' + (i + 1) })) });
+  else if (/social-media captions/.test(sys)) answer = '```json\n' + JSON.stringify({ caption: /Spanish/.test(sys) ? '¿Sabías esto? 👀\nTe lo explico en 30 segundos.\n¿Qué tema sigue?' : 'كنت عارف المعلومة دي؟ 👀\nشرحناها في أقل من دقيقة\nقولّي الموضوع الجاي يكون عن إيه؟', hashtags: ['#science', 'علوم', '#عارف_ليه', '#facts', 'learn on tiktok'] }) + '\n```';
+  else if (/head writer/.test(sys)) answer = /must have about/.test(user) ? scriptAnswer(body.messages.find(m => m.role === 'user').content) : scriptAnswer(user);
   else if (/reviewer/.test(sys)) answer = reviewAnswer(user);
   else if (/motion designer/.test(sys)) answer = storyboardAnswer(user);
   else answer = 'OK';
@@ -141,7 +143,8 @@ function chat(req, res, body) {
 
 // ---------------------------------------------------------------- TTS
 const SR = 44100;
-function synthSpeech(text) {
+let lastGemini = null; // word timings of the last Gemini TTS answer (tests compare the estimate against it)
+function synthSpeech(text, SR = 44100) {
   // One "syllable babble" burst per word; timings per character.
   const chars = [...text];
   const starts = [], ends = [];
@@ -234,6 +237,25 @@ export function startMock(port = PORT) {
     try {
       const raw = await readBody(req);
       if (url.pathname === '/v1/chat/completions' && req.method === 'POST') return chat(req, res, JSON.parse(raw));
+      const gm = url.pathname.match(/^\/v1beta\/models\/([^/:]+):generateContent$/);
+      if (gm && req.method === 'POST') {
+        stats.gemini = (stats.gemini || 0) + 1;
+        if (!req.headers['x-goog-api-key']) return json(res, 403, { error: { code: 403, message: 'API key not valid', status: 'PERMISSION_DENIED' } });
+        if (gm[1] === 'retired-tts') return json(res, 404, { error: { code: 404, message: 'models/retired-tts is not found for API version v1beta', status: 'NOT_FOUND' } });
+        const b = JSON.parse(raw);
+        const text = b.contents[0].parts[0].text.split('\n').slice(1).join('\n'); // first line = style instruction
+        const sp = synthSpeech(text, 24000);
+        const words = [];
+        let cur = null;
+        sp.alignment.characters.forEach((c, i) => { if (/\s/.test(c)) { if (cur) words.push(cur); cur = null; return; } if (!cur) cur = { text: '', start: sp.alignment.character_start_times_seconds[i] }; cur.text += c; cur.end = sp.alignment.character_end_times_seconds[i]; });
+        if (cur) words.push(cur);
+        lastGemini = words;
+        const pcm16 = Buffer.alloc(sp.pcm.length * 2);
+        sp.pcm.forEach((v, i) => pcm16.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(v * 32767))), i * 2));
+        return json(res, 200, { candidates: [{ content: { parts: [{ inlineData: { mimeType: 'audio/L16;codec=pcm;rate=24000', data: pcm16.toString('base64') } }] }, finishReason: 'STOP' }] });
+      }
+      if (url.pathname === '/v1beta/models') return json(res, 200, { models: [{ name: 'models/gemini-flash-latest' }, { name: 'models/mock-tts-2' }, { name: 'models/mock-tts' }] });
+      if (url.pathname === '/mock/last-gemini-words') return json(res, 200, { words: lastGemini });
       if (url.pathname === '/v1/models') return json(res, 200, { object: 'list', data: [{ id: 'models/text-embedding-004' }, { id: 'models/mock-flash-latest' }, { id: 'models/mock-pro' }, { id: 'auto' }, { id: 'models/busy-model' }] });
       if (url.pathname === '/v1/voices') { stats.voices++; return json(res, 200, { voices: [{ voice_id: 'mock-voice-eg', name: 'Mock Egyptian (male)', category: 'premade', labels: { accent: 'egyptian' } }, { voice_id: 'mock-voice-2', name: 'Mock Narrator', category: 'premade', labels: {} }] }); }
       const ttsM = url.pathname.match(/^\/v1\/text-to-speech\/([^/]+)\/with-timestamps$/);

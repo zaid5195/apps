@@ -71,6 +71,88 @@ export function synthPop(sr = MIX_RATE) {
   return [out, out];
 }
 
+// --- Background music (original, synthesized — no licensing issues) --------------------------------
+export const MUSIC_MOODS = ['calm', 'suspense', 'upbeat', 'none'];
+const NOTE = n => 440 * Math.pow(2, (n - 69) / 12); // MIDI → Hz
+const MOOD = {
+  calm: { bpm: 78, chords: [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]], bass: [45, 41, 36, 43], arp: true, drums: false, pad: 0.9 },
+  suspense: { bpm: 92, chords: [[50, 53, 57], [50, 53, 58], [46, 50, 53], [49, 52, 57]], bass: [38, 38, 34, 37], arp: 'pulse', drums: 'tick', pad: 1 },
+  upbeat: { bpm: 112, chords: [[60, 64, 67], [55, 59, 62], [57, 60, 64], [53, 57, 60]], bass: [48, 43, 45, 41], arp: true, drums: 'beat', pad: 0.7 },
+};
+/** Deterministic music bed: pads + arpeggio + bass (+ light drums), stereo, at MIX_RATE. */
+export function synthMusic(mood, duration, seed = 3) {
+  const m = MOOD[mood];
+  const n = Math.ceil(duration * MIX_RATE);
+  const L = new Float32Array(n), R = new Float32Array(n);
+  if (!m) return [L, R];
+  const rnd = prng(seed);
+  const beat = 60 / m.bpm, bar = beat * 4;
+  const add = (t0, dur, f, amp, { attack = 0.01, release = 0.2, pan = 0, partials = [1], detune = 0 } = {}) => {
+    const s0 = Math.floor(t0 * MIX_RATE), len = Math.floor((dur + release) * MIX_RATE);
+    const gl = Math.cos((pan + 1) * Math.PI / 4), gr = Math.sin((pan + 1) * Math.PI / 4);
+    for (let i = 0; i < len && s0 + i < n; i++) {
+      const tt = i / MIX_RATE;
+      const env = Math.min(1, tt / attack) * (tt > dur ? Math.max(0, 1 - (tt - dur) / release) : 1);
+      if (env <= 0) continue;
+      let v = 0;
+      partials.forEach((a, h) => { v += a * Math.sin(2 * Math.PI * f * (h + 1) * tt + h); });
+      const v2 = detune ? Math.sin(2 * Math.PI * f * (1 + detune) * tt) : 0;
+      const o = (v + v2 * 0.6) * amp * env;
+      L[s0 + i] += o * gl; R[s0 + i] += o * gr;
+    }
+  };
+  const bars = Math.ceil(duration / bar);
+  for (let b = 0; b < bars; b++) {
+    const t0 = b * bar, ci = b % m.chords.length, chord = m.chords[ci];
+    // pad
+    chord.forEach((nn, j) => add(t0, bar, NOTE(nn), 0.05 * m.pad, { attack: bar * 0.35, release: bar * 0.4, pan: (j - 1) * 0.5, partials: [1, 0.35, 0.12], detune: 0.003 }));
+    // bass
+    add(t0, bar * 0.9, NOTE(m.bass[ci]), 0.09, { attack: 0.02, release: 0.3, partials: [1, 0.4] });
+    // arpeggio
+    if (m.arp) {
+      const steps = m.arp === 'pulse' ? 8 : 8;
+      for (let s = 0; s < steps; s++) {
+        const nn = m.arp === 'pulse' ? chord[0] + 12 : chord[s % 3] + 12 + (s >= 4 ? 12 : 0);
+        add(t0 + (s * bar) / steps, (bar / steps) * 0.5, NOTE(nn), m.arp === 'pulse' ? 0.025 : 0.035, { attack: 0.005, release: 0.18, pan: (s % 2 ? 0.4 : -0.4), partials: [1, 0.2, 0.08] });
+      }
+    }
+    // drums
+    for (let q = 0; q < 4 && m.drums; q++) {
+      const tq = t0 + q * beat;
+      if (m.drums === 'beat') {
+        // soft kick on every beat
+        const s0 = Math.floor(tq * MIX_RATE);
+        for (let i = 0; i < MIX_RATE * 0.22 && s0 + i < n; i++) { const tt = i / MIX_RATE; const v = Math.sin(2 * Math.PI * (50 + 90 * Math.exp(-tt / 0.03)) * tt) * Math.exp(-tt / 0.09) * 0.16; L[s0 + i] += v; R[s0 + i] += v; }
+      }
+      // off-beat hat / tick
+      const s1 = Math.floor((tq + beat / 2) * MIX_RATE);
+      let lp = 0;
+      for (let i = 0; i < MIX_RATE * 0.04 && s1 + i < n; i++) { const x = rnd() * 2 - 1; lp += 0.6 * (x - lp); const v = (x - lp) * Math.exp(-i / (MIX_RATE * 0.008)) * (m.drums === 'tick' ? 0.03 : 0.045); L[s1 + i] += v; R[s1 + i] += v * 0.8; }
+    }
+  }
+  // fade in / out
+  const fi = Math.floor(0.6 * MIX_RATE), fo = Math.floor(1.6 * MIX_RATE);
+  for (let i = 0; i < n; i++) { const g = Math.min(1, i / fi, (n - i) / fo); L[i] *= g; R[i] *= g; }
+  return [L, R];
+}
+
+/** Gain curve that lowers the music while the voice is speaking (sidechain-style ducking). */
+export function duckCurve(voice, n, depth = 0.7) {
+  const win = Math.floor(0.03 * MIX_RATE);
+  const g = new Float32Array(n).fill(1);
+  let level = 0;
+  const att = Math.exp(-1 / (0.04 * MIX_RATE / win)), rel = Math.exp(-1 / (0.35 * MIX_RATE / win));
+  for (let s = 0; s < n; s += win) {
+    let e = 0;
+    for (let i = s; i < s + win && i < voice.length; i++) e += voice[i] * voice[i];
+    const active = Math.sqrt(e / win) > 0.02 ? 1 : 0;
+    level = active > level ? active + (level - active) * att : active + (level - active) * rel;
+    const v = 1 - depth * level;
+    for (let i = s; i < s + win && i < n; i++) g[i] = v;
+  }
+  return g;
+}
+
 // --- Loudness (ITU-R BS.1770-4 / EBU R128 integrated) -----------------------------------------------
 function biquad(x, b0, b1, b2, a1, a2) {
   const y = new Float32Array(x.length);
@@ -139,7 +221,7 @@ function limit(channels, fs, ceilingDb = -1.5) {
  * @param voice  decoded {sampleRate, channels}
  * @param sfx    [{t, kind, gain}]
  */
-export function mixAudio(voice, sfx, duration, { targetLufs = -14, sfxLevel = 1, seed = 7 } = {}) {
+export function mixAudio(voice, sfx, duration, { targetLufs = -14, sfxLevel = 1, seed = 7, music = 'none', musicLevel = 1 } = {}) {
   const fs = MIX_RATE;
   const n = Math.ceil(duration * fs);
   const v = toMonoMixRate(voice);
@@ -154,6 +236,14 @@ export function mixAudio(voice, sfx, duration, { targetLufs = -14, sfxLevel = 1,
     const s0 = Math.round(e.t * fs), g = (e.gain ?? 1) * sfxLevel;
     for (let i = 0; i < a.length && s0 + i < n; i++) { if (s0 + i < 0) continue; L[s0 + i] += a[i] * g; R[s0 + i] += b[i] * g; }
   });
+  // music bed: about 14 dB under the voice, ducked a further ~10 dB while someone speaks
+  if (music && music !== 'none' && musicLevel > 0) {
+    const [mL, mR] = synthMusic(music, duration, seed);
+    const ml = integratedLoudness([mL, mR], fs);
+    const mg = ml > -69 ? Math.pow(10, (-30 - ml) / 20) * musicLevel : 0;
+    const duck = duckCurve(v.length >= n ? v : Float32Array.from({ length: n }, (_, i) => v[i] || 0), n);
+    for (let i = 0; i < n; i++) { const g = mg * duck[i]; L[i] += mL[i] * g; R[i] += mR[i] * g; }
+  }
   // fade edges
   const fade = Math.round(0.01 * fs);
   for (let i = 0; i < fade && i < n; i++) { const f = i / fade; L[i] *= f; R[i] *= f; L[n - 1 - i] *= f; R[n - 1 - i] *= f; }

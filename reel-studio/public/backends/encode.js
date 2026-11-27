@@ -31,10 +31,11 @@ const tick = () => new Promise(r => { const ch = new MessageChannel(); ch.port1.
  * @param mix   {sampleRate, channels:[Float32Array, Float32Array]} mixed audio
  * @returns Blob (video/mp4)
  */
-export async function encodeReel({ data, mix, font, signal, onProgress, onFrame, log = () => {} }) {
+export async function encodeReel({ data, mix, font, signal, onProgress, onFrame, log = () => {}, cover = false }) {
   if (!webCodecsSupported()) throw new Error('WebCodecs is not available in this browser — use Chrome/Edge (Android or desktop)');
   await loadFonts(document, new URL('../assets/fonts/', import.meta.url).href, font);
-  const W = 1080, H = 1920, fps = data.fps || 30;
+  const [W, H] = { '1:1': [1080, 1080], '16:9': [1920, 1080] }[data.aspect] || [1080, 1920];
+  const fps = data.fps || 30;
   const canvas = document.createElement('canvas');
   canvas.width = W; canvas.height = H;
   const r = createRenderer(canvas, data);
@@ -88,7 +89,11 @@ export async function encodeReel({ data, mix, font, signal, onProgress, onFrame,
   await venc.flush(); venc.close();
   if (err) throw err;
   muxer.finalize();
-  return new Blob([muxer.target.buffer], { type: 'video/mp4' });
+  const video = new Blob([muxer.target.buffer], { type: 'video/mp4' });
+  if (!cover) return video;
+  r.drawCover();
+  const coverBlob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.92));
+  return { video, cover: coverBlob };
 }
 
 /** Decode audio bytes with Web Audio (48 kHz). */

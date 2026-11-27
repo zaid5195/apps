@@ -58,7 +58,7 @@ const pipeline = new Pipeline({
   updateSettings: async patch => settings.update(patch),
   decodeAudio: bytes => decodeAudio(bytes),
   emit,
-  async render({ project, data, wav, settings: s, signal, onProgress, onFrame, log, emit: send }) {
+  async render({ project, data, file = 'reel.mp4', cover = false, wav, settings: s, signal, onProgress, onFrame, log, emit: send }) {
     const dir = store.path(project.id);
     const font = await customFont();
     let useClient = s.renderer === 'browser';
@@ -66,18 +66,18 @@ const pipeline = new Pipeline({
       try { await getBrowser(); } catch (e) { log(`${e.message}`); log('→ falling back to rendering in your browser tab'); useClient = true; }
     }
     if (!useClient) {
-      const out = await renderVideo({ data, wavPath: join(dir, 'mix.wav'), outPath: join(dir, 'reel.mp4'), baseUrl: `http://${HOST}:${PORT}`, font, signal, onProgress, onFrame, log });
-      return { file: 'reel.mp4', ...out };
+      const out = await renderVideo({ data, wavPath: join(dir, 'mix.wav'), outPath: join(dir, file), coverPath: cover ? join(dir, 'cover.jpg') : null, baseUrl: `http://${HOST}:${PORT}`, font, signal, onProgress, onFrame, log });
+      return { file, ...out, cover: cover ? 'cover.jpg' : null };
     }
     // Ask the open browser tab to render with WebCodecs and upload the mp4.
     void wav;
     log('Waiting for the browser tab to render (keep the project open)…');
     const done = new Promise((resolve, reject) => {
-      pendingClientRender.set(project.id, { resolve, reject });
+      pendingClientRender.set(project.id, { resolve, reject, file, aspect: data.aspect });
       signal.addEventListener('abort', () => reject(new DOMException('Cancelled', 'AbortError')));
     });
-    send({ type: 'render-request' });
-    try { const r = await done; return { file: 'reel.mp4', size: r.size, renderer: 'browser(WebCodecs)' }; }
+    send({ type: 'render-request', aspect: data.aspect, file });
+    try { const r = await done; return { file, size: r.size, renderer: 'browser(WebCodecs)' }; }
     finally { pendingClientRender.delete(project.id); }
   },
 });
@@ -138,6 +138,11 @@ async function api(req, res, url) {
     const s = settings.get();
     return send(res, 200, { voices: await elevenVoices({ ...s.eleven }) });
   }
+  if (parts[0] === 'ideas' && m === 'POST') return send(res, 200, await pipeline.ideas(await readJson(req)));
+  if (parts[0] === 'batch') {
+    if (m === 'POST') { const b = await readJson(req); return send(res, 202, await pipeline.batch(b.topics || [], b.options || {})); }
+    if (m === 'GET') return send(res, 200, pipeline.queueState());
+  }
   if (parts[0] === 'models' && m === 'GET') {
     const s = settings.get();
     return send(res, 200, { models: await listModels({ ...s.llm }) });
@@ -166,7 +171,7 @@ async function api(req, res, url) {
     const p = await pipeline.get(id);
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
     res.write(`retry: 1500\ndata: ${JSON.stringify({ type: 'state', project: { ...p, running: pipeline.isRunning(id) } })}\n\n`);
-    if (pendingClientRender.has(id)) res.write(`data: ${JSON.stringify({ type: 'render-request' })}\n\n`);
+    if (pendingClientRender.has(id)) res.write(`data: ${JSON.stringify({ type: 'render-request', aspect: pendingClientRender.get(id).aspect, file: pendingClientRender.get(id).file })}\n\n`);
     if (!clients.has(id)) clients.set(id, new Set());
     clients.get(id).add(res);
     const ping = setInterval(() => res.write(': ping\n\n'), 15000);
@@ -200,21 +205,23 @@ async function api(req, res, url) {
   if (sub === 'voice-source' && m === 'POST') {
     const b = await readJson(req);
     const p = await pipeline.get(id);
-    p.voiceSource = b.source === 'upload' ? 'upload' : 'tts';
+    p.voiceSource = ['upload', 'gemini'].includes(b.source) ? b.source : 'tts';
     if (b.voiceId !== undefined) p.voiceId = String(b.voiceId);
     if (p.stages.voice.status !== 'idle') pipeline.resetFrom(p, 'voice');
     await pipeline.save(p);
     return send(res, 200, p);
   }
+  if (sub === 'style' && m === 'POST') return send(res, 200, await pipeline.setStyle(id, await readJson(req)));
   if (sub === 'render-data' && m === 'GET') {
     const p = await pipeline.get(id);
-    return send(res, 200, { data: renderData(p, settings.get()), font: await customFont(), audio: p.voice ? `/api/projects/${id}/files/${p.voice.file}` : null, mix: (await store.fileStat(id, 'mix.wav')) ? `/api/projects/${id}/files/mix.wav` : null });
+    const aspect = ['9:16', '1:1', '16:9'].includes(url.searchParams.get('aspect')) ? url.searchParams.get('aspect') : '9:16';
+    return send(res, 200, { data: renderData(p, settings.get(), aspect), font: await customFont(), audio: p.voice ? `/api/projects/${id}/files/${p.voice.file}` : null, mix: (await store.fileStat(id, 'mix.wav')) ? `/api/projects/${id}/files/mix.wav` : null });
   }
   if (sub === 'render-upload' && m === 'POST') {
     const pend = pendingClientRender.get(id);
     if (!pend) return send(res, 409, { error: 'No render is waiting for the browser' });
     const body = await readBody(req, 1.5e9);
-    await store.writeFile(id, 'reel.mp4', body);
+    await store.writeFile(id, pend.file || 'reel.mp4', body);
     pend.resolve({ size: body.length });
     return send(res, 200, { ok: true, size: body.length });
   }

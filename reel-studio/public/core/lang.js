@@ -5,6 +5,7 @@ export const LANGS = {
     writer: 'Egyptian Arabic (Egyptian dialect, not Modern Standard Arabic)', labelLang: 'Arabic',
     question: 'عارف ليه؟', questionKey: ['عارف', 'ليه'], qmark: '؟', recap: 'الخلاصة', series: 'عارف ليه؟',
     styleFile: 'script-style.md', deepgram: 'ar', scribe: 'ara',
+    follow: 'تابعني عشان الحلقة الجاية', followBtn: 'تابع', comment: 'قولّي في الكومنتات: نشرح إيه المرة الجاية؟',
     typeLabel: { intro: 'البداية', question: 'السؤال', concept: 'الفكرة', process: 'الخطوات', compare: 'مقارنة', stat: 'بالأرقام', recap: 'الخلاصة' },
   },
   es: {
@@ -12,6 +13,7 @@ export const LANGS = {
     writer: 'natural conversational Spanish (neutral, easy to follow in Spain and Latin America)', labelLang: 'Spanish',
     question: '¿Sabes por qué?', questionKey: ['sabes', 'por'], qmark: '?', recap: 'En resumen', series: '¿Sabes por qué?',
     styleFile: 'script-style.es.md', deepgram: 'es', scribe: 'spa',
+    follow: 'Sígueme para el próximo episodio', followBtn: 'Seguir', comment: '¿Qué explico la próxima vez? Dímelo en comentarios',
     typeLabel: { intro: 'Inicio', question: 'La pregunta', concept: 'La idea', process: 'Paso a paso', compare: 'Comparación', stat: 'En cifras', recap: 'Resumen' },
   },
 };

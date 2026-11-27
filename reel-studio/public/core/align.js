@@ -123,3 +123,41 @@ export function alignTokens(tokens, words, { totalDuration } = {}) {
   const cov = out.length ? out.reduce((s, t) => s + t.coverage, 0) / out.length : 0;
   return { tokens: out, stats: { tokens: out.length, timedWords: words.length, weak, coverage: +cov.toFixed(3), matchedChars: pairs.length, scriptChars: A.length } };
 }
+
+/**
+ * Timing without any transcription: find where speech happens in the audio (energy + pauses) and spread
+ * the script's characters over the speech time only. Good when every word is read in order (our own TTS).
+ */
+export function estimateTimings(tokens, { sampleRate, channels }) {
+  const x = channels[0], win = Math.round(sampleRate * 0.01);
+  const env = [];
+  for (let s = 0; s + win <= x.length; s += win) { let e = 0; for (let i = s; i < s + win; i++) e += x[i] * x[i]; env.push(Math.sqrt(e / win)); }
+  const sorted = env.slice().sort((a, b) => a - b);
+  const thr = Math.max(sorted[Math.floor(sorted.length * 0.95)] * 0.08, 1e-4);
+  // speech mask with 60 ms hangover so word gaps inside a phrase stay "speech"
+  const on = env.map(v => v > thr);
+  for (let i = 0, last = -999; i < on.length; i++) { if (env[i] > thr) last = i; else if (i - last <= 6) on[i] = true; }
+  const speechIdx = [];
+  on.forEach((v, i) => v && speechIdx.push(i));
+  if (!speechIdx.length) return alignTokens(tokens, [], { totalDuration: x.length / sampleRate });
+  const weight = t => Math.max(1, normalize(t.text).length) + 1.2; // letters + a little per word
+  const total = tokens.reduce((s, t) => s + weight(t), 0);
+  let acc = 0;
+  const at = f => speechIdx[Math.min(speechIdx.length - 1, Math.floor(f * speechIdx.length))] * 0.01;
+  const out = tokens.map(t => {
+    const a = acc / total; acc += weight(t); const b = acc / total;
+    let start = at(a);
+    // snap to the nearest onset (energy rising out of a dip) within ±180 ms
+    const si = Math.round(start / 0.01);
+    let best = null;
+    for (let j = Math.max(2, si - 18); j <= si + 18 && j < env.length; j++) {
+      const dip = Math.min(env[j - 1], env[j - 2]);
+      if (env[j] > dip * 2.2 && env[j] > thr && env[j - 1] < env[j] && (best == null || Math.abs(j - si) < Math.abs(best - si))) best = j - 1;
+    }
+    if (best != null) start = best * 0.01;
+    return { ...t, start: +start.toFixed(3), end: +Math.max(start + 0.05, at(b) - 0.01).toFixed(3), weak: false, estimated: true, coverage: 1 };
+  });
+  for (let q = 1; q < out.length; q++) if (out[q].start <= out[q - 1].start) out[q].start = +(out[q - 1].start + 0.03).toFixed(3);
+  for (let q = 0; q + 1 < out.length; q++) if (out[q].end > out[q + 1].start) out[q].end = out[q + 1].start;
+  return { tokens: out, stats: { tokens: out.length, timedWords: 0, weak: 0, coverage: 1, estimated: true } };
+}

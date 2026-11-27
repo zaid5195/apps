@@ -18,6 +18,10 @@ export class RemoteBackend {
   saveSettings(patch) { return req('/api/settings', { method: 'PUT', body: patch }); }
   voices() { return req('/api/voices'); }
   models() { return req('/api/models'); }
+  ideas(b) { return req('/api/ideas', { method: 'POST', body: b }); }
+  batch(topics, options) { return req('/api/batch', { method: 'POST', body: { topics, options } }); }
+  batchState() { return req('/api/batch'); }
+  setStyle(id, s) { return req(`/api/projects/${id}/style`, { method: 'POST', body: s }); }
   listProjects() { return req('/api/projects'); }
   createProject(b) { return req('/api/projects', { method: 'POST', body: b }); }
   getProject(id) { return req(`/api/projects/${id}`); }
@@ -30,24 +34,24 @@ export class RemoteBackend {
   setApprovals(id, a) { return req(`/api/projects/${id}/approvals`, { method: 'POST', body: a }); }
   uploadVoice(id, file) { return req(`/api/projects/${id}/voice?name=${encodeURIComponent(file.name)}`, { method: 'POST', body: file, headers: { 'content-type': file.type || 'audio/mpeg' } }); }
   setVoiceSource(id, b) { return req(`/api/projects/${id}/voice-source`, { method: 'POST', body: b }); }
-  async renderData(id) { const j = await req(`/api/projects/${id}/render-data`); return { ...j, audio: j.audio }; }
+  async renderData(id, aspect = '9:16') { const j = await req(`/api/projects/${id}/render-data?aspect=${encodeURIComponent(aspect)}`); return { ...j, audio: j.audio }; }
   async fileUrl(id, name) { return `/api/projects/${id}/files/${encodeURIComponent(name)}`; }
   subscribe(id, cb) {
     const es = new EventSource(`/api/projects/${id}/events`);
     es.onmessage = e => {
       const ev = JSON.parse(e.data);
-      if (ev.type === 'render-request') this._clientRender(id, cb);
+      if (ev.type === 'render-request') this._clientRender(id, cb, ev.aspect);
       cb(ev);
     };
     es.onerror = () => cb({ type: 'disconnected' });
     return () => es.close();
   }
   /** The server has no Chromium: render here with WebCodecs and upload the mp4. */
-  async _clientRender(id, cb) {
+  async _clientRender(id, cb, aspect = '9:16') {
     if (this.rendering.has(id)) return;
     this.rendering.add(id);
     try {
-      const rd = await this.renderData(id);
+      const rd = await this.renderData(id, aspect);
       const wav = new Uint8Array(await (await fetch(rd.mix)).arrayBuffer());
       const blob = await encodeReel({ data: rd.data, mix: decodeWav(wav), font: rd.font, onProgress: (value, label) => cb({ type: 'progress', stage: 'render', value, label }), onFrame: (data, t) => cb({ type: 'frame', stage: 'render', data, t }) });
       await req(`/api/projects/${id}/render-upload`, { method: 'POST', body: blob, headers: { 'content-type': 'video/mp4' } });
