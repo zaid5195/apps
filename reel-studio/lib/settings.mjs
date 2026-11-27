@@ -4,10 +4,10 @@ import { join } from 'node:path';
 
 import { DEFAULT_SETTINGS as DEFAULTS, deepMerge, getPath as get, setPath as set, mask } from '../public/core/defaults.js';
 export { DEFAULTS };
-const SECRET = [['llm', 'apiKey'], ['eleven', 'apiKey'], ['deepgram', 'apiKey']];
+const SECRET = [['llm', 'apiKey'], ['eleven', 'apiKey'], ['deepgram', 'apiKey'], ['gemini', 'apiKey']];
 // Environment variables. Base URLs from the environment win (handy for tests / mocks); keys are fallbacks.
-const ENV_URLS = { LLM_BASE_URL: ['llm', 'baseUrl'], ELEVENLABS_BASE_URL: ['eleven', 'baseUrl'], DEEPGRAM_BASE_URL: ['deepgram', 'baseUrl'] };
-const ENV_FALLBACK = { LLM_API_KEY: ['llm', 'apiKey'], LLM_MODEL: ['llm', 'model'], ELEVENLABS_API_KEY: ['eleven', 'apiKey'], ELEVENLABS_VOICE_ID: ['eleven', 'voiceId'], ELEVENLABS_MODEL_ID: ['eleven', 'modelId'], DEEPGRAM_API_KEY: ['deepgram', 'apiKey'], FONT_FOLDER: ['fontFolder'] };
+const ENV_URLS = { LLM_BASE_URL: ['llm', 'baseUrl'], ELEVENLABS_BASE_URL: ['eleven', 'baseUrl'], DEEPGRAM_BASE_URL: ['deepgram', 'baseUrl'], GEMINI_BASE_URL: ['gemini', 'baseUrl'] };
+const ENV_FALLBACK = { LLM_API_KEY: ['llm', 'apiKey'], LLM_MODEL: ['llm', 'model'], ELEVENLABS_API_KEY: ['eleven', 'apiKey'], ELEVENLABS_VOICE_ID: ['eleven', 'voiceId'], ELEVENLABS_MODEL_ID: ['eleven', 'modelId'], DEEPGRAM_API_KEY: ['deepgram', 'apiKey'], GEMINI_API_KEY: ['gemini', 'apiKey'], FONT_FOLDER: ['fontFolder'] };
 
 export function loadDotEnv(root) {
   const f = join(root, '.env');

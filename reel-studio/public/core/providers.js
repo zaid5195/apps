@@ -79,3 +79,39 @@ export async function elevenSTT({ apiKey, audio, mime = 'audio/mpeg', fileName =
   const j = await res.json();
   return { transcript: j.text, words: (j.words || []).filter(w => w.type !== 'spacing' && w.text?.trim()).map(w => ({ text: w.text.trim(), start: w.start, end: w.end })) };
 }
+
+// ---- Gemini TTS (free tier, same key as the Gemini LLM) -------------------------------------------
+export const GEMINI_VOICES = ['Kore', 'Puck', 'Charon', 'Fenrir', 'Aoede', 'Leda', 'Orus', 'Zephyr', 'Callirrhoe', 'Autonoe', 'Enceladus', 'Iapetus', 'Umbriel', 'Algieba', 'Despina', 'Erinome', 'Algenib', 'Rasalgethi', 'Laomedeia', 'Achernar', 'Alnilam', 'Schedar', 'Gacrux', 'Pulcherrima', 'Achird', 'Zubenelgenubi', 'Vindemiatrix', 'Sadachbia', 'Sadaltager', 'Sulafat'];
+const GEM = 'https://aistudio.google.com/apikey';
+
+/** Native Gemini API: list models that can speak (name contains "tts"). */
+export async function geminiTtsModels({ apiKey, baseUrl = 'https://generativelanguage.googleapis.com/v1beta', fetchImpl = fetch, signal }) {
+  const res = await fetchImpl(`${trimBase(baseUrl)}/models?pageSize=200`, { headers: { 'x-goog-api-key': apiKey }, signal });
+  if (!res.ok) throw await httpError(res, 'Gemini models');
+  const j = await res.json();
+  return (j.models || []).map(m => String(m.name).replace(/^models\//, '')).filter(n => /tts/i.test(n)).sort((a, b) => b.localeCompare(a, 'en', { numeric: true }));
+}
+
+/** Returns {sampleRate, channels:[Float32Array]} (Gemini sends 16-bit PCM, 24 kHz mono). */
+export async function geminiTTS({ apiKey, text, voice = 'Kore', model = 'gemini-2.5-flash-preview-tts', style = '', baseUrl = 'https://generativelanguage.googleapis.com/v1beta', fetchImpl = fetch, signal }) {
+  if (!apiKey) throw missingKey('Gemini', GEM);
+  const body = {
+    contents: [{ parts: [{ text: (style ? style + '\n' : '') + text }] }],
+    generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } },
+  };
+  const res = await fetchImpl(`${trimBase(baseUrl)}/models/${encodeURIComponent(model)}:generateContent`, { method: 'POST', headers: { 'x-goog-api-key': apiKey, 'content-type': 'application/json' }, body: JSON.stringify(body), signal });
+  if (!res.ok) throw await httpError(res, 'Gemini TTS');
+  const j = await res.json();
+  const part = j.candidates?.[0]?.content?.parts?.find(p => p.inlineData?.data);
+  if (!part) throw new Error('Gemini TTS returned no audio' + (j.candidates?.[0]?.finishReason ? ` (${j.candidates[0].finishReason})` : ''));
+  const bytes = b64ToBytes(part.inlineData.data);
+  const mime = part.inlineData.mimeType || '';
+  const rate = +(mime.match(/rate=(\d+)/) || [, 24000])[1];
+  if (/L16|pcm/i.test(mime) || !mime) {
+    const n = bytes.length >> 1, out = new Float32Array(n);
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    for (let i = 0; i < n; i++) out[i] = dv.getInt16(i * 2, true) / 32768;
+    return { pcm: { sampleRate: rate, channels: [out] } };
+  }
+  return { bytes, mime };
+}

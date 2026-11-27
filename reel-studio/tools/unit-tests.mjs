@@ -114,6 +114,29 @@ t('run-time repair: key pasted into Base URL', st2.llm.apiKey.startsWith('AIza')
 let threw = null; try { pl.checkLlm({ llm: { baseUrl: 'https://aistudio.google.com/', apiKey: '' } }); } catch (e) { threw = e; }
 t('still asks for the key when it is missing', threw?.code === 'key' && /Gemini/.test(threw.message));
 
+// music + estimated timings + hook + end screen
+const au = await import('../public/core/audio.js');
+for (const mood of ['calm', 'suspense', 'upbeat']) {
+  const [mL] = au.synthMusic(mood, 3);
+  t(`music ${mood}: audible, no NaN, no clipping`, mL.every(Number.isFinite) && mL.some(v => Math.abs(v) > 0.01) && mL.every(v => Math.abs(v) < 1));
+}
+const sr2 = 48000, voice2 = new Float32Array(sr2 * 4);
+for (let i = 0; i < voice2.length; i++) { const tt = i / sr2; voice2[i] = (tt % 1 < 0.6 ? 0.25 : 0) * Math.sin(2 * Math.PI * 150 * tt); }
+const m1 = au.mixAudio({ sampleRate: sr2, channels: [voice2] }, [], 4, { music: 'calm' });
+const dk = au.duckCurve(voice2, voice2.length);
+t(`music ducks under the voice (gain ${dk[Math.round(1.4 * sr2)].toFixed(2)} speaking vs ${dk[Math.round(1.98 * sr2)].toFixed(2)} after a pause)`, m1.lufs > -14.3 && m1.lufs < -13.7 && dk[Math.round(1.4 * sr2)] < 0.4 && dk[Math.round(1.98 * sr2)] > dk[Math.round(1.4 * sr2)] + 0.15);
+const { estimateTimings } = await import('../public/core/align.js');
+const tk3 = tokenize('واحد اتنين تلاتة اربعة');
+const pcm3 = new Float32Array(sr2 * 3);
+[[0.2, 0.6], [0.8, 1.3], [1.5, 2.0], [2.2, 2.7]].forEach(([a, b]) => { for (let i = Math.round(a * sr2); i < Math.round(b * sr2); i++) pcm3[i] = 0.3 * Math.sin(2 * Math.PI * 180 * i / sr2); });
+const est = estimateTimings(tk3, { sampleRate: sr2, channels: [pcm3] });
+t(`estimated timings follow speech bursts (${est.tokens.map(x => x.start).join(', ')})`, est.tokens.every((x, i) => Math.abs(x.start - [0.2, 0.8, 1.5, 2.2][i]) < 0.12));
+const { buildTimeline: bt2 } = await import('../public/core/timeline.js');
+const tl2 = bt2({ tokens: tk, storyboard: sb, duration: 10, endAt: 7 });
+t('hook = words before «عارف»', tl2.hook.length === 4 && tl2.hook[3].text === 'الوقت');
+t('end screen gets whoosh + pop', tl2.sfx.some(e => e.kind === 'pop' && Math.abs(e.t - 7.45) < 0.01));
+t('numbers in captions are highlighted', bt2({ tokens: tokenize('فيه 100 خلية').map((x, i) => ({ ...x, start: i * 0.3, end: i * 0.3 + 0.25 })), storyboard: { scenes: [{ type: 'intro', at: 0, template: 'hero', items: [] }], accents: [] }, duration: 4 }).captions[0].words[1].tone === 'accent2');
+
 // icons
 const lib = JSON.parse(readFileSync(new URL('../public/assets/icons/icons.json', import.meta.url)));
 t('icons: licences included', lib.sets.health.license === 'CC0-1.0' && lib.sets.tabler.license === 'MIT');

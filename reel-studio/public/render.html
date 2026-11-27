@@ -14,7 +14,8 @@ const canvas = document.getElementById('c');
 let renderer = null;
 // window.loadProject(data, {font}) → {duration, fps, frames}; then window.drawFrame(t) draws frame t.
 window.loadProject = async (data, opts = {}) => {
-  if (opts.width) { canvas.width = opts.width; canvas.height = Math.round(opts.width * 16 / 9); }
+  const [cw, ch] = { '1:1': [1080, 1080], '16:9': [1920, 1080] }[data.aspect] || [1080, 1920];
+  canvas.width = cw; canvas.height = ch;
   await loadFonts(document, './assets/fonts/', opts.font);
   renderer = createRenderer(canvas, data);
   renderer.drawFrame(0);
@@ -22,6 +23,7 @@ window.loadProject = async (data, opts = {}) => {
 };
 window.drawFrame = t => { renderer.drawFrame(t); return true; };
 window.grab = (t, q = 0.95) => { renderer.drawFrame(t); return canvas.toDataURL('image/jpeg', q); };
+window.grabCover = (q = 0.92) => { renderer.drawCover(); return canvas.toDataURL('image/jpeg', q); };
 const id = new URLSearchParams(location.search).get('project');
 if (id) {
   const r = await fetch(`/api/projects/${id}/render-data`);

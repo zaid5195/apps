@@ -44,14 +44,24 @@ export function createRenderer(canvas, data, { fontFamily = 'Reel' } = {}) {
   const TYPE_LABEL = LG.typeLabel || TYPE_LABEL_AR;
   const mx = x => (rtl ? x : W - x); // mirror horizontal positions for left-to-right languages
   const A = a => (rtl || a === 'center' ? a : a === 'right' ? 'left' : 'right');
-  const k = canvas.width / W;
+  const style = { captions: 'classic', endScreen: false, hook: true, handle: '', ...(data.style || {}) };
+  const ASPECTS = {
+    '9:16': { DW: 720, DH: 1280, card: { x: CARD.x, y: CARD.y, s: 1 }, cap: { cx: 360, cy: 1062, s: 1 }, tagY: 70, bar: { x0: 60, x1: 660, y: 1222 } },
+    '1:1': { DW: 720, DH: 720, card: { x: 178, y: 92, s: 0.56 }, cap: { cx: 360, cy: 616, s: 0.78 }, tagY: 46, bar: { x0: 60, x1: 660, y: 700 } },
+    '16:9': { DW: 1280, DH: 720, card: rtl ? { x: 700, y: 60, s: 0.78 } : { x: 75, y: 60, s: 0.78 }, cap: rtl ? { cx: 372, cy: 390, s: 1.12 } : { cx: 908, cy: 390, s: 1.12 }, tagY: 46, bar: { x0: 60, x1: 1220, y: 690 } },
+  };
+  const LAY = ASPECTS[data.aspect] || ASPECTS['9:16'];
+  const DW = LAY.DW, DH = LAY.DH;
+  const k = canvas.width / DW;
+  let curT = 0;
   const FONT = `"${fontFamily}", "IBM Plex Sans Arabic", "Noto Sans Arabic", Tahoma, sans-serif`;
-  const timeline = buildTimeline({ tokens: data.tokens, storyboard: data.storyboard, duration: data.duration });
+  const timeline = buildTimeline({ tokens: data.tokens, storyboard: data.storyboard, duration: data.duration, endAt: style.endScreen ? data.endAt : null });
+  const useHook = style.hook !== false && timeline.hook.length >= 2 && (timeline.scenes[1]?.t0 ?? 1e9) >= timeline.hookEnd - 0.25;
   const iconMap = data.iconMap || {};
   const pathCache = new Map();
   const measureCache = new Map();
   const seed = hashString(data.id || data.title || 'reel');
-  const particles = (() => { const r = prng(seed); return Array.from({ length: 26 }, () => ({ x: r() * W, y: r() * H, s: 0.6 + r() * 1.8, v: 4 + r() * 10, p: r() * 6.28 })); })();
+  const particles = (() => { const r = prng(seed); return Array.from({ length: 26 }, () => ({ x: r() * DW, y: r() * DH, s: 0.6 + r() * 1.8, v: 4 + r() * 10, p: r() * 6.28 })); })();
   const mainIcon = timeline.scenes.find(s => s.icon)?.icon || '';
 
   const font = (size, weight = 700) => `${weight} ${size}px ${FONT}`;
@@ -100,7 +110,8 @@ export function createRenderer(canvas, data, { fontFamily = 'Reel' } = {}) {
       ctx.lineWidth = 3; ctx.strokeStyle = hexA(color, 0.35); ctx.stroke();
       ctx.beginPath(); ctx.arc(0, 0, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * eo(clamp(rv.x * 1.4, 0, 1))); ctx.strokeStyle = color; ctx.lineWidth = 3.5; ctx.lineCap = 'round'; ctx.stroke();
     }
-    drawIcon(noun, 0, 0, r * iconScale, rv.on ? C.text : C.sec, 1, keyOverride);
+    const br = rv.on ? 1 + 0.03 * Math.sin(curT * 2.4 + x * 0.013 + y * 0.007) : 1; // icons breathe
+    drawIcon(noun, 0, 0, r * iconScale * br, rv.on ? C.text : C.sec, 1, keyOverride);
     ctx.restore();
   }
   function wrap(text, f, maxW, maxLines = 2) {
@@ -115,13 +126,13 @@ export function createRenderer(canvas, data, { fontFamily = 'Reel' } = {}) {
     if (lines.length > maxLines) { lines.length = maxLines; lines[maxLines - 1] += '…'; }
     return lines;
   }
-  function label(text, x, y, { size = 26, weight = 700, color = C.text, align = 'center', maxW = 300, lines = 2, alpha = 1, lh = 1.3, valign = 'middle' } = {}) {
+  function label(text, x, y, { size = 26, weight = 700, color = C.text, align = 'center', maxW = 300, lines = 2, alpha = 1, lh = 1.3, valign = 'middle', dir } = {}) {
     if (!text || alpha <= 0.01) return 0;
     const f = font(size, weight);
     const ls = wrap(text, f, maxW, lines);
     ctx.save();
     ctx.globalAlpha *= alpha;
-    ctx.font = f; ctx.fillStyle = color; ctx.textAlign = align; ctx.direction = DIR; ctx.textBaseline = 'middle';
+    ctx.font = f; ctx.fillStyle = color; ctx.textAlign = align; ctx.direction = dir || (/^[\x00-\x7F]+$/.test(String(text)) ? 'ltr' : DIR); ctx.textBaseline = 'middle';
     const total = (ls.length - 1) * size * lh;
     const y0 = valign === 'middle' ? y - total / 2 : valign === 'top' ? y + size * 0.5 : y - total - size * 0.5;
     ls.forEach((l, i) => ctx.fillText(l, x, y0 + i * size * lh));
@@ -172,17 +183,17 @@ export function createRenderer(canvas, data, { fontFamily = 'Reel' } = {}) {
 
   // ---- background, frame, captions -------------------------------------------------------------
   function background(t) {
-    ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = C.bg; ctx.fillRect(0, 0, DW, DH);
     const off = (t * 6) % 40;
     ctx.strokeStyle = 'rgba(244,243,238,0.035)'; ctx.lineWidth = 1;
     ctx.beginPath();
-    for (let x = (off % 40) - 40; x < W + 40; x += 40) { ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, H); }
-    for (let y = off - 40; y < H + 40; y += 40) { ctx.moveTo(0, y + 0.5); ctx.lineTo(W, y + 0.5); }
+    for (let x = (off % 40) - 40; x < DW + 40; x += 40) { ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, DH); }
+    for (let y = off - 40; y < DH + 40; y += 40) { ctx.moveTo(0, y + 0.5); ctx.lineTo(DW, y + 0.5); }
     ctx.stroke();
-    glow(CX, CY - 60, 520, C.accent, 0.07);
-    glow(W * 0.85, H * 0.9, 420, C.accent2, 0.06);
+    glow(LAY.card.x + CARD.w * LAY.card.s / 2, LAY.card.y + CARD.h * LAY.card.s * 0.45, 520 * LAY.card.s, C.accent, 0.07);
+    glow(DW * 0.85, DH * 0.9, 420, C.accent2, 0.06);
     for (const p of particles) {
-      const y = (((p.y - t * p.v) % H) + H) % H;
+      const y = (((p.y - t * p.v) % DH) + DH) % DH;
       ctx.fillStyle = hexA(C.sec, 0.18 + 0.12 * Math.sin(t * 1.3 + p.p));
       ctx.fillRect(p.x, y, p.s, p.s);
     }
@@ -191,7 +202,7 @@ export function createRenderer(canvas, data, { fontFamily = 'Reel' } = {}) {
     // series tag (top right)
     const f = font(22, 700);
     const tw = measure(data.series, f);
-    const px = W - 36, py = 70, ph = 42;
+    const px = DW - 36, py = LAY.tagY, ph = 42;
     ctx.save();
     rr(px - tw - 58, py - ph / 2, tw + 58, ph, ph / 2); ctx.fillStyle = C.card; ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,0.07)'; ctx.lineWidth = 1.5; ctx.stroke();
@@ -204,7 +215,7 @@ export function createRenderer(canvas, data, { fontFamily = 'Reel' } = {}) {
     ctx.fillText(`${String(k + 1).padStart(2, '0')} / ${String(timeline.scenes.length).padStart(2, '0')}`, 40, py + 1);
     ctx.restore();
     // progress
-    const y = 1222, x0 = 60, x1 = W - 60;
+    const { y, x0, x1 } = LAY.bar;
     ctx.fillStyle = 'rgba(244,243,238,0.08)'; rr(x0, y - 2, x1 - x0, 4, 2); ctx.fill();
     const p = clamp(t / timeline.duration, 0, 1);
     ctx.fillStyle = C.accent; rr(x1 - (x1 - x0) * p, y - 2, (x1 - x0) * p, 4, 2); ctx.fill();
@@ -277,8 +288,11 @@ export function createRenderer(canvas, data, { fontFamily = 'Reel' } = {}) {
     return out;
   }
   function captions(t) {
+    if (useHook && t < timeline.hookEnd + 0.15) return; // the hook is already on screen as kinetic type
+    if (style.endScreen && data.endAt != null && t >= data.endAt) return;
     const c = timeline.captions.find(c => t >= c.t0 && t < c.t1);
     if (!c) return;
+    if (style.captions === 'word') return wordCaption(c, t);
     const lines = layoutCaption(c);
     const aIn = eo(ramp(t, c.t0, 0.14)), aOut = 1 - ramp(t, c.t1 - 0.1, 0.1);
     const lh = 72, y0 = 1062 - ((lines.length - 1) * lh) / 2 + (1 - aIn) * 14;
@@ -289,11 +303,13 @@ export function createRenderer(canvas, data, { fontFamily = 'Reel' } = {}) {
       const y = y0 + li * lh;
       for (const wd of line) {
         const on = t >= wd.start;
-        const color = on ? (wd.tone ? TONE[wd.tone] : C.text) : hexA(C.sec, 0.55);
-        const pop = on ? 1 + 0.1 * (1 - eo(ramp(t, wd.start, 0.2))) : 1;
+        const active = on && style.captions === 'box' && t < (line.find(n => n.start > wd.start)?.start ?? nextStart(c, wd)) ;
+        let color = on ? (wd.tone ? TONE[wd.tone] : C.text) : hexA(C.sec, 0.55);
+        const pop = (on ? 1 + 0.1 * (1 - eo(ramp(t, wd.start, 0.2))) : 1) * (wd.num ? 1.12 : 1);
         ctx.save();
         ctx.translate(wd.x + wd.w / 2, y); ctx.scale(pop, pop);
-        if (on && wd.tone) glow(0, 0, wd.w * 0.7, TONE[wd.tone], 0.12);
+        if (active) { const bg = wd.tone ? TONE[wd.tone] : C.accent; ctx.fillStyle = bg; rr(-wd.w / 2 - 12, -34, wd.w + 24, 66, 16); ctx.fill(); color = C.bg; }
+        else if (on && wd.tone) glow(0, 0, wd.w * 0.7, TONE[wd.tone], 0.12);
         ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.direction = wd.ltr ? 'ltr' : 'rtl';
         ctx.fillText(wd.text, 0, 0);
         ctx.restore();
@@ -307,12 +323,153 @@ export function createRenderer(canvas, data, { fontFamily = 'Reel' } = {}) {
     ctx.restore();
   }
 
+  function nextStart(c, wd) {
+    const all = c.words; const i = all.indexOf(all.find(w => w.i === wd.i));
+    return all[i + 1]?.start ?? c.t1;
+  }
+  /** "Word" style: one big word at a time, centred. */
+  function wordCaption(c, t) {
+    let w = null;
+    for (const x of c.words) if (t >= x.start - 0.02) w = x;
+    if (!w) return;
+    const nxt = nextStart(c, w);
+    if (t > w.end + 0.6 && t < nxt) return;
+    let size = w.num ? 96 : 86;
+    let f = font(size, 700);
+    const tw = measure(w.text, f);
+    if (tw > 620) { size = Math.floor(size * 620 / tw); f = font(size, 700); }
+    const p = eo(ramp(t, w.start, 0.18));
+    const s = lerp(1.25, 1, p);
+    ctx.save();
+    ctx.translate(360, 1062); ctx.scale(s, s);
+    ctx.globalAlpha = 0.25 + 0.75 * p;
+    const col = w.tone ? TONE[w.tone] : C.text;
+    glow(0, 0, Math.max(120, tw * 0.7), w.tone ? TONE[w.tone] : C.accent, 0.12);
+    ctx.font = f; ctx.fillStyle = col; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.direction = w.ltr ? 'ltr' : DIR;
+    ctx.fillText(w.text, 0, 0);
+    if (w.underline) { ctx.fillStyle = col; const uw = Math.min(tw, 620) * eo(ramp(t, w.start, 0.3)); rr(-uw / 2, size * 0.62, uw, 7, 3.5); ctx.fill(); }
+    ctx.restore();
+  }
+
+  /** Kinetic hook: the first sentence typed big on the intro, each word popping at its onset. */
+  const hookFont = font(62, 700);
+  let hookLines = null;
+  function hookLayout() {
+    if (hookLines) return hookLines;
+    const space = measure(' ', hookFont) * 1.1, maxW = 560;
+    const lines = [[]]; let w = 0;
+    for (const wd of timeline.hook) {
+      const ww = measure(wd.text, hookFont);
+      if (lines[lines.length - 1].length && w + space + ww > maxW) { lines.push([]); w = 0; }
+      w += (lines[lines.length - 1].length ? space : 0) + ww;
+      lines[lines.length - 1].push({ ...wd, w: ww });
+    }
+    hookLines = lines.map(line => {
+      const width = line.reduce((s, x) => s + x.w, 0) + space * (line.length - 1);
+      let x = rtl ? CX + width / 2 : CX - width / 2;
+      return line.map(wd => { const o = { ...wd, x: rtl ? x - wd.w : x }; x += rtl ? -(wd.w + space) : wd.w + space; return o; });
+    });
+    return hookLines;
+  }
+  function kineticHook(t, top) {
+    const lines = hookLayout();
+    const lh = 84, y0 = top - ((lines.length - 1) * lh) / 2;
+    const longest = timeline.hook.reduce((a, b) => (b.text.length > a.text.length ? b : a), timeline.hook[0]);
+    lines.forEach((line, li) => line.forEach(wd => {
+      const on = t >= wd.start;
+      const p = on ? eo(ramp(t, wd.start, 0.22)) : 0;
+      const key = wd.tone || wd.num || wd === longest || wd.i === longest.i;
+      const color = on ? (wd.tone ? TONE[wd.tone] : key ? C.accent : C.text) : hexA(C.sec, 0.14);
+      ctx.save();
+      ctx.translate(wd.x + wd.w / 2, y0 + li * lh + (1 - p) * 18 * (on ? 1 : 0));
+      const s = on ? lerp(1.35, 1, back(Math.min(1, p))) : 0.96;
+      ctx.scale(s, s);
+      if (on && key) glow(0, 0, wd.w * 0.75, wd.tone ? TONE[wd.tone] : C.accent, 0.16 * p);
+      ctx.font = hookFont; ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.direction = wd.ltr ? 'ltr' : DIR;
+      ctx.fillText(wd.text, 0, 0);
+      ctx.restore();
+    }));
+  }
+
+  /** End screen: follow + comment prompt. */
+  function endScreen(t) {
+    const t0 = data.endAt;
+    const a = eo(ramp(t, t0, 0.45));
+    if (a <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = a * 0.88; ctx.fillStyle = C.bg; ctx.fillRect(0, 0, DW, DH); ctx.globalAlpha = a;
+    const cx = DW / 2, cy = DH * (DH > DW ? 0.42 : 0.4), sc = DH > DW ? 1 : 0.8;
+    ctx.translate(cx, cy); ctx.scale(sc, sc);
+    glow(0, 0, 320, C.accent, 0.18);
+    const pr = back(clamp((t - t0 - 0.2) / 0.5, 0, 1));
+    ctx.save(); ctx.scale(pr, pr);
+    ctx.beginPath(); ctx.arc(0, -120, 92, 0, Math.PI * 2); ctx.fillStyle = C.card; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = C.accent; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-26, -158); ctx.lineTo(36, -120); ctx.lineTo(-26, -82); ctx.closePath(); ctx.fillStyle = C.accent; ctx.fill();
+    ctx.restore();
+    const L1 = LG.follow, L2 = LG.comment;
+    label(style.handle || data.series, 0, 30, { size: 54, alpha: eo(ramp(t, t0 + 0.35, 0.4)), maxW: 600, lines: 1 });
+    label(L1, 0, 100, { size: 32, color: C.sec, alpha: eo(ramp(t, t0 + 0.5, 0.4)), maxW: 600 });
+    // follow button
+    const bp = eo(ramp(t, t0 + 0.7, 0.4)), pulse = 1 + 0.04 * Math.sin((t - t0) * 6);
+    ctx.save(); ctx.globalAlpha *= bp; ctx.translate(0, 196); ctx.scale(pulse, pulse);
+    const bf = font(34, 700), bw = measure(LG.followBtn, bf) + 110;
+    rr(-bw / 2, -38, bw, 76, 38); ctx.fillStyle = C.accent; ctx.fill();
+    ctx.font = bf; ctx.fillStyle = C.bg; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.direction = DIR;
+    ctx.fillText('+  ' + LG.followBtn, 0, 2);
+    ctx.restore();
+    // comment prompt with a bouncing arrow
+    const cp = eo(ramp(t, t0 + 1.0, 0.4));
+    ctx.save(); ctx.globalAlpha *= cp; ctx.translate(0, 320);
+    rr(-300, -50, 600, 100, 24); ctx.fillStyle = C.elev; ctx.fill(); ctx.strokeStyle = hexA(C.accent2, 0.6); ctx.lineWidth = 2; ctx.stroke();
+    ctx.restore();
+    label(L2, 0, 320, { size: 28, maxW: 540, alpha: cp, lines: 2 });
+    const by = 400 + 10 * Math.abs(Math.sin((t - t0) * 4));
+    ctx.save(); ctx.globalAlpha *= cp; ctx.strokeStyle = C.accent2; ctx.lineWidth = 5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-18, by); ctx.lineTo(0, by + 18); ctx.lineTo(18, by); ctx.stroke(); ctx.restore();
+    ctx.restore();
+  }
+
+  /** Cover image (thumbnail): big title + main icon. */
+  function drawCover() {
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+    ctx.globalAlpha = 1;
+    background(0);
+    const vertical = DH > DW;
+    const cx = DW / 2;
+    const icy = vertical ? 470 : DH * 0.5, tx = vertical ? cx : (rtl ? DW * 0.33 : DW * 0.67), ix = vertical ? cx : (rtl ? DW * 0.75 : DW * 0.25);
+    glow(ix, icy, 340, C.accent, 0.22);
+    ctx.save(); ctx.translate(ix, icy);
+    ctx.setLineDash([3, 15]); ctx.strokeStyle = hexA(C.sec, 0.35); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, 230, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(0, 0, 170, 0, Math.PI * 2); ctx.fillStyle = C.card; ctx.fill(); ctx.lineWidth = 6; ctx.strokeStyle = C.accent; ctx.stroke();
+    ctx.restore();
+    drawIcon(mainIcon, ix, icy, 190, C.text, 1);
+    const title = data.title || '';
+    const size = vertical ? 78 : 64;
+    label(title, tx, vertical ? 860 : DH * 0.42, { size, maxW: vertical ? 620 : DW * 0.44, lines: 3, lh: 1.25 });
+    // series chip
+    const f = font(30, 700), tw = measure(data.series, f);
+    const sy = vertical ? 1060 : DH * 0.72;
+    ctx.save(); rr(tx - tw / 2 - 30, sy - 30, tw + 60, 60, 30); ctx.fillStyle = C.accent; ctx.fill();
+    ctx.font = f; ctx.fillStyle = C.bg; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.direction = DIR; ctx.fillText(data.series, tx, sy + 2); ctx.restore();
+    if (style.handle) label(style.handle, tx, sy + 80, { size: 28, color: C.sec, maxW: 600, lines: 1 });
+  }
+
   // ---- templates -------------------------------------------------------------------------------
   const T = {};
   const items = s => s.items;
   const topY = s => (s.title && !['hero', 'ask', 'checklist'].includes(s.template) ? 290 : 250);
 
   T.hero = (s, t) => {
+    if (useHook && s.k === 0) {
+      const cy = 330, rv = reveal(t, s.t0 + 0.05, s.t0, 0.5);
+      glow(CX, cy, 220, C.accent, 0.14 * rv.a);
+      ctx.save(); ctx.translate(CX, cy); ctx.rotate(t * 0.22);
+      ctx.setLineDash([3, 13]); ctx.strokeStyle = hexA(C.sec, 0.3); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, 112, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+      ctx.restore();
+      badge(CX, cy, 74, s.icon || mainIcon, rv, { iconScale: 1.1 });
+      kineticHook(t, 640);
+      return;
+    }
     const cy = 470;
     const rv = reveal(t, s.t0 + 0.12, s.t0, 0.6);
     glow(CX, cy, 300, C.accent, 0.16 * rv.a);
@@ -397,7 +554,7 @@ export function createRenderer(canvas, data, { fontFamily = 'Reel' } = {}) {
       if (j > 0) {
         const p = eio(ramp(t, it.t - 0.4, 0.42));
         drawOn([[CX, y - gap + 6], [CX, y - 8]], p, C.accent, 4);
-        if (p >= 1) { const q = ((t - it.t) * 0.9) % 1; ctx.beginPath(); ctx.arc(CX, lerp(y - gap + 6, y - 8, q), 5, 0, Math.PI * 2); ctx.fillStyle = C.text; ctx.fill(); }
+        if (p >= 1) for (let d = 0; d < 3; d++) { const q = ((t - it.t) * 0.9 + d / 3) % 1; ctx.beginPath(); ctx.arc(CX, lerp(y - gap + 6, y - 8, q), 4.5, 0, Math.PI * 2); ctx.fillStyle = hexA(d ? C.accent : C.text, 1 - Math.abs(q - 0.5)); ctx.fill(); }
       }
       ctx.save();
       ctx.globalAlpha *= rv.a; ctx.translate(CX, y + h / 2); ctx.scale(rv.s, rv.s);
@@ -667,28 +824,43 @@ export function createRenderer(canvas, data, { fontFamily = 'Reel' } = {}) {
 
   function drawFrame(t) {
     t = clamp(t, 0, timeline.duration);
+    curT = t;
     ctx.setTransform(k, 0, 0, k, 0, 0);
     ctx.globalAlpha = 1;
     background(t);
-    cardShell();
     const kk = sceneAt(timeline, t);
     const s = timeline.scenes[kk];
+    ctx.save();
+    const cs = LAY.card.s;
+    ctx.translate(LAY.card.x - CARD.x * cs, LAY.card.y - CARD.y * cs); ctx.scale(cs, cs);
+    cardShell();
     if (s) {
       ctx.save();
       rr(CARD.x, CARD.y, CARD.w, CARD.h, CARD.r); ctx.clip();
       const tin = kk > 0 ? eio(ramp(t, s.t0, TR)) : 1;
-      if (kk > 0 && tin < 1) drawScene(timeline.scenes[kk - 1], t, 1 - tin, 1 + 0.08 * tin);
-      drawScene(s, t, tin, lerp(0.94, 1, tin));
-      // cut flash
-      if (kk > 0 && tin < 1) { ctx.fillStyle = hexA(C.accent, 0.06 * Math.sin(Math.PI * tin)); ctx.fillRect(CARD.x, CARD.y, CARD.w, CARD.h); }
+      const dir = rtl ? -1 : 1;
+      if (kk > 0 && tin < 1) { ctx.save(); ctx.translate(-dir * 70 * tin, 0); drawScene(timeline.scenes[kk - 1], t, 1 - tin, 1 + 0.08 * tin); ctx.restore(); }
+      ctx.save(); ctx.translate(dir * 70 * (1 - tin), 0); drawScene(s, t, tin, lerp(0.94, 1, tin)); ctx.restore();
+      // light sweep across the card on the cut
+      if (kk > 0 && tin < 1) {
+        const sx = CARD.x + (rtl ? 1 - tin : tin) * (CARD.w + 300) - 150;
+        const g = ctx.createLinearGradient(sx - 120, 0, sx + 120, 0);
+        g.addColorStop(0, hexA(C.accent, 0)); g.addColorStop(0.5, hexA(C.accent, 0.12 * Math.sin(Math.PI * tin))); g.addColorStop(1, hexA(C.accent, 0));
+        ctx.fillStyle = g; ctx.fillRect(CARD.x, CARD.y, CARD.w, CARD.h);
+      }
       ctx.restore();
       cardFrame(t, s, kk);
-      chrome(t, kk, s);
     }
+    ctx.restore();
+    if (s) chrome(t, kk, s);
+    ctx.save();
+    ctx.translate(LAY.cap.cx - 360 * LAY.cap.s, LAY.cap.cy - 1062 * LAY.cap.s); ctx.scale(LAY.cap.s, LAY.cap.s);
     captions(t);
+    ctx.restore();
+    if (style.endScreen && data.endAt != null && t >= data.endAt) endScreen(t);
   }
 
-  return { drawFrame, timeline, duration: timeline.duration, fps: data.fps || 30 };
+  return { drawFrame, drawCover, timeline, duration: timeline.duration, fps: data.fps || 30, width: DW, height: DH };
 }
 
 /** Load the reel fonts (default IBM Plex Sans Arabic, or a custom one) into a document. */

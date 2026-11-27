@@ -6,13 +6,16 @@ export const DEFAULT_SETTINGS = {
   stt: 'deepgram',
   seriesTag: 'عارف ليه؟',
   seriesTagEs: '¿Sabes por qué?',
+  handle: '@uryon29',
+  gemini: { apiKey: '', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', ttsModel: 'gemini-2.5-flash-preview-tts', voice: 'Kore' },
+  style: { music: 'calm', musicLevel: 1, captions: 'classic', endScreen: true, hook: true, formats: ['9:16'] },
   fontFolder: '',
   approvals: { script: 'wait', voice: 'auto', timing: 'auto', storyboard: 'auto', render: 'auto' },
   selfReview: true,
   sfxLevel: 1,
   renderer: 'auto',
 };
-export const SECRET_PATHS = [['llm', 'apiKey'], ['eleven', 'apiKey'], ['deepgram', 'apiKey']];
+export const SECRET_PATHS = [['llm', 'apiKey'], ['eleven', 'apiKey'], ['deepgram', 'apiKey'], ['gemini', 'apiKey']];
 /** One-tap presets for OpenAI-compatible providers (all work from a phone browser except a local FreeLLMAPI). */
 export const LLM_PRESETS = [
   { id: 'freellmapi', name: 'FreeLLMAPI (local)', baseUrl: 'http://127.0.0.1:31415/v1', model: 'auto' },
