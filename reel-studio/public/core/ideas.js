@@ -17,7 +17,7 @@ export function parseIdeas(json) {
 export function publishMessages({ lang = 'ar', title, script, sources = [] }) {
   const lg = L(lang);
   return [
-    { role: 'system', content: `You write social-media captions for a faceless science reel series («${lg.question}») in ${lg.labelLang}${lang === 'ar' ? ' (Egyptian dialect)' : ''}. Reply with ONE JSON object only: {"caption":"...","hashtags":["#..."]}. caption: 2–3 short lines — a curiosity hook, one line of value, a question that invites comments; at most 2 emojis. hashtags: 8–12, mixing ${lg.labelLang} and English, broad + niche (e.g. #science #علوم), no spaces inside a hashtag.` },
+    { role: 'system', content: `You write social-media captions for a faceless science reel series («${lg.question}») in ${lg.labelLang}${lang === 'ar' ? ' (Egyptian dialect)' : ''}. Reply with ONE JSON object only: {"title":"...","caption":"...","hashtags":["#..."]}. title: a YouTube Shorts title, max 80 characters, curiosity-driven, no hashtags. caption: 2–3 short lines — a curiosity hook, one line of value, a question that invites comments; at most 2 emojis. hashtags: 8–12, mixing ${lg.labelLang} and English, broad + niche (e.g. #science #علوم), no spaces inside a hashtag.` },
     { role: 'user', content: `Title: ${title}\nScript:\n${script}\n${sources.length ? 'Sources: ' + sources.join(' | ') : ''}` },
   ];
 }
@@ -25,6 +25,7 @@ export function publishMessages({ lang = 'ar', title, script, sources = [] }) {
 export function fallbackPublish({ lang = 'ar', title }) {
   const ar = lang !== 'es';
   return {
+    title,
     caption: ar ? `${title}\nالإجابة هتفاجئك 👀\nقولّي في الكومنتات: كنت عارفها؟` : `${title}\nLa respuesta te va a sorprender 👀\n¿Lo sabías? Cuéntamelo en comentarios`,
     hashtags: ar ? ['#عارف_ليه', '#علوم', '#معلومة', '#ثقافة_عامة', '#تعلم_على_تيك_توك', '#science', '#facts', '#learnontiktok'] : ['#sabesporque', '#ciencia', '#curiosidades', '#datoscuriosos', '#aprendeentiktok', '#science', '#facts', '#learnontiktok'],
   };

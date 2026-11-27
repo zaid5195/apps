@@ -33,7 +33,7 @@ const api = async (path, opts = {}) => {
 
 const mock = await startMock(MOCK).catch(() => null); // may already be running
 const server = spawn(process.execPath, [join(ROOT, 'server.mjs')], {
-  env: { ...process.env, PORT: String(PORT), DATA_DIR: DATA, LLM_BASE_URL: `http://127.0.0.1:${MOCK}/v1`, ELEVENLABS_BASE_URL: `http://127.0.0.1:${MOCK}`, DEEPGRAM_BASE_URL: `http://127.0.0.1:${MOCK}` },
+  env: { ...process.env, PORT: String(PORT), DATA_DIR: DATA, LLM_BASE_URL: `http://127.0.0.1:${MOCK}/v1`, ELEVENLABS_BASE_URL: `http://127.0.0.1:${MOCK}`, DEEPGRAM_BASE_URL: `http://127.0.0.1:${MOCK}`, YOUTUBE_API_BASE: `http://127.0.0.1:${MOCK}/youtube/v3`, YOUTUBE_UPLOAD_BASE: `http://127.0.0.1:${MOCK}/upload/youtube/v3`, GOOGLE_TOKEN_URL: `http://127.0.0.1:${MOCK}/token`, GOOGLE_AUTH_URL: `http://127.0.0.1:${MOCK}/o/oauth2/v2/auth` },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 server.stdout.on('data', d => process.env.VERBOSE && process.stdout.write('[server] ' + d));
@@ -203,6 +203,25 @@ try {
   const rdS = await api(`/api/projects/${id}/render-data`);
   ok(rdS.data.style.handle === '@my_new_name' && rdS.data.style.followText === 'اشترك عشان يوصلك الجديد' && rdS.data.style.commentText === 'تحب نشرح إيه بعد كده؟', 'end screen name + texts are editable per project');
 
+  // ---- YouTube: connect the channel (OAuth), upload with title/description/tags, cover as thumbnail
+  await api('/api/settings', { method: 'PUT', body: { youtube: { clientId: 'mock-client.apps.googleusercontent.com', clientSecret: 'GOCSPX-mock-secret', privacy: 'public' } } });
+  const yc = await api('/api/youtube/connect');
+  const r1 = await fetch(yc.url, { redirect: 'manual' });                  // Google consent (mock) → back to our callback
+  const r2 = await fetch(r1.headers.get('location'), { redirect: 'manual' }); // callback exchanges the code
+  const yst = await api('/api/youtube');
+  ok(/yt=ok/.test(r2.headers.get('location') || '') && yst.connected && yst.channel?.title === 'Mock Channel', `YouTube connected: ${yst.channel?.title}`);
+  const sYt = await api('/api/settings');
+  ok(!JSON.stringify(sYt).includes('1//mock-refresh') && !JSON.stringify(sYt).includes('GOCSPX-mock-secret'), 'YouTube secret + refresh token never sent to the browser');
+  await api(`/api/projects/${id}/youtube`, { method: 'POST', body: {} });
+  for (let i = 0; i < 100; i++) { p = await api(`/api/projects/${id}`); if (['done', 'error'].includes(p.youtube?.status)) break; await sleep(200); }
+  const vids = await fetch(`http://127.0.0.1:${MOCK}/mock/youtube-videos`).then(r => r.json());
+  const v = vids[p.youtube?.videoId];
+  ok(p.youtube?.status === 'done' && /youtu\.be\/mockVid/.test(p.youtube.url), `uploaded to YouTube: ${p.youtube?.url} ${p.youtube?.error || ''}`);
+  ok(v && v.bytes === p.render.size && v.snippet.title === p.publish.title && v.snippet.description.includes('#') && v.snippet.description.includes('#Shorts') && v.snippet.tags.length >= 3 && v.status.privacyStatus === 'public', `YouTube got the full file (${v?.bytes} bytes, chunked) + title «${v?.snippet?.title}» + description + ${v?.snippet?.tags?.length} tags`);
+  ok(v?.thumbnailBytes > 1000 && p.youtube.thumbnail, 'cover set as the YouTube thumbnail');
+  ok(/خاص|Studio/.test(p.youtube.note || ''), 'warns when YouTube kept the video private (unverified Google project)');
+  await api('/api/settings', { method: 'PUT', body: { youtube: { autoUpload: true } } });
+
   // free Gemini voice + estimated timings, through a 2-topic batch (and a retired TTS model)
   await api('/api/settings', { method: 'PUT', body: { eleven: { apiKey: '' }, deepgram: { apiKey: '' }, gemini: { apiKey: 'g-test-key', baseUrl: `http://127.0.0.1:${MOCK}/v1beta`, ttsModel: 'retired-tts' } } });
   const bt = await api('/api/batch', { method: 'POST', body: { topics: [LANG === 'es' ? '¿Por qué soñamos?' : 'ليه بنحلم؟', LANG === 'es' ? '¿Por qué el cielo es azul?' : 'ليه السما زرقا؟'], options: { lang: LANG, length: 10, voiceSource: 'gemini', style: { captions: 'word', music: 'suspense' } } } });
@@ -211,6 +230,8 @@ try {
   ok(bps.every(b => b.stages.render.status === 'done'), `batch: ${bps.length} reels finished one after another (${bps.map(b => Object.values(b.stages).map(s => s.status[0]).join('')).join(' / ')})`);
   ok(bps.every(b => b.voice?.provider === 'gemini' && b.timing?.provider === 'estimate'), 'Gemini voice + estimated timings (no transcription key)');
   ok((await api('/api/settings')).gemini.ttsModel === 'mock-tts-2', 'retired Gemini TTS model → switched and saved');
+  for (let i = 0; i < 100; i++) { bps = await Promise.all(bt.queued.map(q => api(`/api/projects/${q}`))); if (bps.every(b => ['done', 'error'].includes(b.youtube?.status))) break; await sleep(200); }
+  ok(bps.every(b => b.youtube?.status === 'done'), `auto-publish: every batch reel uploaded by itself (${bps.map(b => b.youtube?.status).join(', ')})`);
   const gw = (await fetch(`http://127.0.0.1:${MOCK}/mock/last-gemini-words`).then(r => r.json())).words;
   const lastP = bps[bps.length - 1];
   if (gw && gw.length === lastP.timing.tokens.length) {

@@ -7,6 +7,7 @@ import { LANGS } from './core/lang.js';
 import { providerOf, isLocalUrl, fixBaseUrl, providerFromKey, looksLikeKey } from './core/errors.js';
 import { createRenderer, loadFonts } from './render/engine.js';
 import { icon } from './ui-icons.js';
+import { youtubeMeta } from './core/youtube.js';
 
 const STAGE_AR = { script: 'السكريبت', voice: 'الصوت', timing: 'التوقيت', storyboard: 'الستوري بورد', render: 'الرندر' };
 const STATUS_AR = { idle: 'في الانتظار', running: 'شغّال…', review: 'محتاج موافقتك', done: 'تم', error: 'خطأ' };
@@ -288,13 +289,13 @@ async function viewProject(id) {
   ];
   const nodeStatus = nid => {
     if (nid === 'topic') return 'done';
-    if (nid === 'publish') return p.stages.render.status === 'done' && p.render ? 'done' : p.stages.render.status === 'running' ? 'running-soft' : 'idle';
+    if (nid === 'publish') { const y = p.youtube?.status; if (y === 'running') return 'running'; if (y === 'error') return 'error'; if (y === 'needs-auth') return 'review'; return p.stages.render.status === 'done' && p.render ? 'done' : p.stages.render.status === 'running' ? 'running-soft' : 'idle'; }
     return p.stages[nid].status;
   };
   const nodeSub = nid => {
     const st = nodeStatus(nid);
     if (nid === 'topic') return p.topic;
-    if (nid === 'publish') return p.render ? 'فيديو + غلاف + وصف' : 'في الانتظار';
+    if (nid === 'publish') { const y = p.youtube; if (y?.status === 'running') return `يوتيوب ${Math.round((live.yt || 0) * 100)}%`; if (y?.status === 'done') return 'على يوتيوب ✓'; if (y?.status === 'error') return 'يوتيوب: خطأ'; if (y?.status === 'needs-auth') return 'أكّد دخول يوتيوب'; return p.render ? 'فيديو + غلاف + وصف' : 'في الانتظار'; }
     if (st === 'running') return nid === 'render' ? `${Math.round((live.progress.render?.value || 0) * 100)}%` : { script: 'يكتب…', voice: 'يسجّل…', timing: 'يطابق…', storyboard: 'يصمّم…' }[nid];
     if (st === 'review') return 'بانتظار موافقتك';
     if (st === 'error') return 'خطأ — اضغط';
@@ -678,9 +679,55 @@ async function viewProject(id) {
     return h('div', { class: 'preview' }, h('div', {}, h('div', { class: 'phone' }, v)),
       h('div', {}, h('div', { class: 'row' }, dl, shareBtn, ...extra),
         coverImg ? h('div', { class: 'row', style: 'margin-top:10px;align-items:flex-end' }, coverImg, coverDl) : null,
-        pubBox, stylePanel,
+        pubBox, youtubeBox(), stylePanel,
         h('div', { class: 'muted small', style: 'margin-top:8px' }, `${p.render.duration.toFixed(1)} ث · ${p.render.frames} فريم · ${(p.render.size / 1e6).toFixed(1)} MB · ${p.render.lufs} LUFS · ${p.render.renderer} · ${p.render.seconds} ث رندر`),
         p.script?.sources?.length ? h('details', {}, h('summary', {}, 'نص الوصف + المصادر'), h('textarea', { rows: 5, value: `${p.title}\n\n${p.script.text}\n\nالمصادر:\n${p.script.sources.join('\n')}` })) : null));
+  }
+
+  // ---- 📤 YouTube publishing (inside the «publish» panel)
+  function youtubeBox() {
+    const y = p.youtube || {};
+    const wrap = h('div', { class: 'card', style: 'background:var(--elev);margin-top:10px' });
+    const head = h('div', { class: 'row' }, h('span', { style: 'color:#ff3d3d;display:flex' }, icon('play', 20)), h('h3', { class: 'grow', style: 'margin:0' }, 'النشر على يوتيوب'));
+    if (y.status === 'running') {
+      wrap.append(head, h('div', { class: 'bar', style: 'margin-top:10px' }, h('i', { id: 'yt-bar', style: `width:${((live.yt || 0) * 100).toFixed(1)}%` })), h('div', { class: 'muted small', id: 'yt-label' }, 'بيترفع…'));
+      return wrap;
+    }
+    if (y.status === 'done') {
+      wrap.append(head,
+        h('div', { style: 'margin:8px 0' }, '✅ اتنشر: ', h('a', { href: y.url, target: '_blank', rel: 'noopener', dir: 'ltr' }, y.url), ` · ${({ public: 'عام', unlisted: 'غير مُدرج', private: 'خاص' })[y.privacy] || y.privacy || ''}`),
+        y.note ? h('div', { class: 'errbox', style: 'border-color:var(--warn);background:rgba(245,165,36,.07)' }, y.note) : null,
+        h('div', { class: 'row' }, h('a', { class: 'btn sm primary', href: y.url, target: '_blank', rel: 'noopener' }, icon('play', 15), 'افتح الفيديو'), h('a', { class: 'btn sm', href: 'https://studio.youtube.com/', target: '_blank', rel: 'noopener' }, 'YouTube Studio'),
+          h('button', { class: 'sm ghost', onclick: () => { p.youtube = { ...y, status: 'again' }; refresh(); } }, 'انشر تاني')));
+      return wrap;
+    }
+    const meta = youtubeMeta(p, { privacy: settings?.youtube?.privacy || 'public' });
+    const title = h('input', { type: 'text', dir: 'auto', value: meta.title, maxLength: 100 });
+    const desc = h('textarea', { dir: 'auto', rows: 6, value: meta.description });
+    const tags = h('input', { type: 'text', dir: 'auto', value: (p.publish?.hashtags || []).join(' ') });
+    let privacy = meta.privacy;
+    const go = h('button', { class: 'primary', onclick: async () => {
+      go.disabled = true;
+      try {
+        const st = await be.youtubeStatus();
+        if (!st.configured) { toast('حط Client ID بتاع Google في الإعدادات الأول', true); location.hash = '#/settings'; return; }
+        if (!st.connected) {
+          if (be.mode === 'server') { toast('اربط القناة من الإعدادات الأول', true); location.hash = '#/settings'; return; }
+          await guard(() => be.youtubeConnect()); // phone: Google pop-up (needs this tap)
+        }
+        const hashtags = tags.value.split(/[\s,،]+/).filter(Boolean);
+        await guard(() => be.youtubeUpload(id, { title: title.value, description: desc.value, hashtags, privacy }), 'بدأ الرفع ↑');
+      } finally { go.disabled = false; }
+    } }, icon('send', 16), 'انشر على يوتيوب');
+    wrap.append(head,
+      y.status === 'error' || y.status === 'needs-auth' ? h('div', { class: 'errbox' }, '⚠️ ' + (y.error || 'ما اترفعش')) : null,
+      h('label', {}, 'العنوان'), title,
+      h('label', {}, 'الوصف'), desc,
+      h('label', {}, 'الهاشتاغات (Tags)'), tags,
+      h('label', {}, 'الظهور'), seg([['public', 'عام'], ['unlisted', 'غير مُدرج'], ['private', 'خاص']], privacy, v => (privacy = v)),
+      h('div', { class: 'row', style: 'margin-top:10px' }, go),
+      h('div', { class: 'hint' }, 'الفيديو العمودي (أقل من 3 دقايق) بينزل «Short» لوحده. الغلاف بيتحط كصورة مصغّرة لو قناتك موثّقة.'));
+    return wrap;
   }
 
   // ---- live preview player (same renderer as the export)
@@ -746,6 +793,13 @@ async function viewProject(id) {
       const np = document.getElementById('node-prog'), ns = document.getElementById('node-render-sub');
       if (np) np.style.width = (ev.value * 100).toFixed(1) + '%';
       if (ns && ev.stage === 'render') ns.textContent = `${Math.round(ev.value * 100)}%`;
+    } else if (ev.type === 'youtube') {
+      live.yt = ev.value;
+      const yb = document.getElementById('yt-bar'), yl = document.getElementById('yt-label');
+      if (yb) yb.style.width = (ev.value * 100).toFixed(1) + '%';
+      if (yl) yl.textContent = `${Math.round(ev.value * 100)}%`;
+      const ns = document.querySelector('#node-publish .sub');
+      if (ns) ns.textContent = `يوتيوب ${Math.round(ev.value * 100)}%`;
     } else if (ev.type === 'frame') {
       live.frame = ev.data;
       const img = document.getElementById('live-frame');
@@ -821,13 +875,47 @@ async function viewSettings() {
     toast(`${voices.length} صوت`);
   } }, '⟳ تحميل الأصوات');
   let stt = s.stt, renderer = s.renderer, selfReview = s.selfReview;
+  // ---- YouTube card
+  const yt = { privacy: s.youtube?.privacy || 'public', autoUpload: !!s.youtube?.autoUpload, setThumbnail: s.youtube?.setThumbnail !== false };
+  const ytStatus = h('div', { class: 'row' }, h('span', { class: 'muted small' }, '…'));
+  const ytOrigin = be.mode === 'server' ? 'http://127.0.0.1:4301' : location.origin;
+  async function drawYt() {
+    const st = await be.youtubeStatus().catch(() => ({}));
+    ytStatus.replaceChildren(...clean(
+      st.connected || st.channel ? h('span', { class: 'pill done' }, h('i', { class: 'd' }), `متصل: ${st.channel?.title || 'قناتك'}`) : h('span', { class: 'pill' }, h('i', { class: 'd' }), 'مش متصل'),
+      h('span', { class: 'grow' }),
+      st.connected ? h('button', { class: 'sm danger', onclick: async () => { await guard(() => be.youtubeDisconnect(), 'اتفصل'); drawYt(); } }, 'افصل')
+        : h('button', { class: 'sm primary', onclick: async () => { await save(true); await guard(() => be.youtubeConnect()); drawYt(); } }, icon('play', 15), 'اربط القناة')));
+  }
+  drawYt();
+  if (/yt=/.test(location.hash)) { const m = decodeURIComponent(location.hash.split('yt=')[1] || ''); setTimeout(() => toast(m === 'ok' ? 'القناة اتربطت ✓' : 'ما اتربطتش: ' + m, m !== 'ok'), 300); }
+  const ytCard = h('div', { class: 'card' }, h('h2', {}, '5. النشر على يوتيوب'),
+    ytStatus,
+    h('label', {}, 'Google OAuth Client ID'), inp('youtube.clientId', { class: 'ltr', placeholder: '…apps.googleusercontent.com' }),
+    be.mode === 'server' ? h('div', {}, h('label', {}, 'Client secret (للكمبيوتر بس)'), key('youtube.clientSecret')) : null,
+    h('label', {}, 'الظهور الافتراضي'), seg([['public', 'عام'], ['unlisted', 'غير مُدرج'], ['private', 'خاص']], yt.privacy, v => (yt.privacy = v)),
+    h('label', { class: 'row', style: 'gap:8px;color:var(--text)' }, h('input', { type: 'checkbox', checked: yt.autoUpload, onchange: e => (yt.autoUpload = e.target.checked) }), 'انشر لوحده بعد ما الفيديو يخلص'),
+    h('label', { class: 'row', style: 'gap:8px;color:var(--text)' }, h('input', { type: 'checkbox', checked: yt.setThumbnail, onchange: e => (yt.setThumbnail = e.target.checked) }), 'حط الغلاف كصورة مصغّرة'),
+    be.mode === 'local' ? h('div', { class: 'hint' }, 'على الهاتف Google بيطلب تأكيد الدخول كل ساعة تقريبًا، فالنشر التلقائي بيشتغل لو أكدت في آخر ساعة؛ غير كده اضغط «انشر على يوتيوب» في عقدة النشر.') : null,
+    h('details', {}, h('summary', {}, '📘 إزاي تجيب Client ID (مرة وحدة، 5 دقايق)'),
+      h('ol', { class: 'small', style: 'line-height:2' },
+        h('li', {}, 'افتح ', h('a', { href: 'https://console.cloud.google.com/projectcreate', target: '_blank', rel: 'noopener' }, 'Google Cloud'), ' واعمل مشروع جديد.'),
+        h('li', {}, 'فعّل ', h('a', { href: 'https://console.cloud.google.com/apis/library/youtube.googleapis.com', target: '_blank', rel: 'noopener' }, 'YouTube Data API v3'), ' (Enable).'),
+        h('li', {}, h('a', { href: 'https://console.cloud.google.com/auth/overview', target: '_blank', rel: 'noopener' }, 'OAuth consent screen'), ': External، اسم أي حاجة وإيميلك، وفي Test users ضيف إيميلك.'),
+        h('li', {}, h('a', { href: 'https://console.cloud.google.com/apis/credentials', target: '_blank', rel: 'noopener' }, 'Credentials'), ' ← Create credentials ← OAuth client ID ← Web application.'),
+        h('li', {}, 'Authorized JavaScript origins: ', h('code', {}, 'https://zaid5195.github.io'), ' و ', h('code', {}, 'http://127.0.0.1:4301')),
+        h('li', {}, 'Authorized redirect URIs: ', h('code', {}, 'http://127.0.0.1:4301/oauth/youtube/callback')),
+        h('li', {}, 'انسخ Client ID (والـ secret للكمبيوتر) هنا، احفظ، واضغط «اربط القناة».')),
+      h('div', { class: 'errbox', style: 'border-color:var(--warn);background:rgba(245,165,36,.07)' },
+        'تنبيه من يوتيوب: الفيديوهات اللي بتترفع من مشروع Google جديد (لسه ما اتراجعش) بتنزل «خاصة» لحد ما تخليها «عامة» من YouTube Studio بضغطة، أو تطلب مراجعة المشروع من Google. الحد اليومي حوالي 6 فيديوهات.'),
+      h('div', { class: 'hint' }, `أصل الصفحة دي: ${ytOrigin}`)));
   const defStyle = { ...DEFAULT_STYLE, ...(s.style || {}) }; defStyle.formats = [...(defStyle.formats || ['9:16'])];
   const defStyleBox = styleControls(defStyle);
   const gemVoice = h('select', {}, GEMINI_VOICES.map(v => h('option', { value: v, selected: v === (s.gemini?.voice || 'Kore') }, v)));
   const approvals = { ...s.approvals };
 
   async function save(quiet) {
-    const patch = { llm: {}, eleven: {}, deepgram: {}, gemini: { voice: gemVoice.value }, approvals, stt, renderer, selfReview, style: defStyle, llmBackups: backups.map(b => ({ ...b })) };
+    const patch = { llm: {}, eleven: {}, deepgram: {}, youtube: { ...yt }, gemini: { voice: gemVoice.value }, approvals, stt, renderer, selfReview, style: defStyle, llmBackups: backups.map(b => ({ ...b })) };
     for (const [path, el] of Object.entries(f)) {
       if (el.disabled) continue;
       const parts = path.split('.');
@@ -883,6 +971,7 @@ async function viewSettings() {
       h('div', { class: 'hint' }, 'على الموبايل Scribe بيشتغل بنفس مفتاح ElevenLabs من غير مفتاح تاني.'),
       h('label', {}, 'Deepgram API key'), key('deepgram.apiKey', 'https://console.deepgram.com/'),
       h('div', { class: 'grid2' }, h('div', {}, h('label', {}, 'Model'), inp('deepgram.model', { class: 'ltr' })), h('div', {}, h('label', {}, 'Base URL'), inp('deepgram.baseUrl', { class: 'ltr' })))),
+    ytCard,
     h('div', { class: 'card' }, h('h2', {}, '4. الشكل والرندر'),
       h('div', { class: 'grid2' }, h('div', {}, h('label', {}, 'اسم السلسلة — عربي'), inp('seriesTag')), h('div', {}, h('label', {}, 'اسم السلسلة — Español'), inp('seriesTagEs', { dir: 'ltr' }))),
       fontBlock,

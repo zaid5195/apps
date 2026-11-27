@@ -4,6 +4,7 @@ import { Pipeline, STAGES, renderData } from '../core/pipeline.js';
 import { DEFAULT_SETTINGS, SECRET_PATHS, deepMerge, getPath, setPath, mask, maskBackups, mergeBackups } from '../core/defaults.js';
 import { elevenVoices } from '../core/providers.js';
 import { listModels } from '../core/llm.js';
+import { YT_SCOPES, getChannel } from '../core/youtube.js';
 import { decodeWav } from '../core/audio.js';
 import { lang } from '../core/lang.js';
 import { encodeReel, decodeAudioBrowser } from './encode.js';
@@ -61,6 +62,11 @@ export class LocalBackend {
       loadIcons: () => (this.icons ??= fetch(new URL('../assets/icons/icons.json', import.meta.url)).then(r => r.json())),
       decodeAudio: bytes => decodeAudioBrowser(bytes),
       updateSettings: patch => this.saveSettings(patch),
+      youtubeToken: async () => {
+        const t = this._ytToken();
+        if (t) return t;
+        throw Object.assign(new Error('YouTube sign-in needed'), { code: 'needs-auth', friendlyAr: 'لازم تأكد الدخول ليوتيوب (Google بيطلبها كل ساعة على الهاتف) — اضغط «انشر على يوتيوب».' });
+      },
       emit: (id, ev) => { for (const cb of this.subs.get(id) || []) cb(ev); },
       render: async ({ project, data, file = 'reel.mp4', cover = false, wav, signal, onProgress, onFrame, log }) => {
         const mix = decodeWav(wav);
@@ -112,6 +118,41 @@ export class LocalBackend {
   batch(topics, options) { return this.pipeline.batch(topics, options); }
   async batchState() { return this.pipeline.queueState(); }
   setStyle(id, s) { return this.pipeline.setStyle(id, s); }
+  // ---- YouTube in the browser: Google Identity Services token (valid ~1 hour, no secret on the phone)
+  _ytToken() {
+    try { const t = JSON.parse(sessionStorage.getItem('reel.yt') || 'null'); if (t && t.exp > Date.now() + 60000) return t.token; } catch {}
+    return null;
+  }
+  async youtubeStatus() {
+    const s = await this._settings();
+    return { configured: !!s.youtube?.clientId, connected: !!this._ytToken(), channel: s.youtube?.channel || null, origin: location.origin, phone: true };
+  }
+  async _gis() {
+    if (window.google?.accounts?.oauth2) return window.google.accounts.oauth2;
+    await new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'https://accounts.google.com/gsi/client'; sc.onload = res; sc.onerror = () => rej(new Error('ما قدرناش نحمّل تسجيل الدخول بتاع Google')); document.head.append(sc); });
+    return window.google.accounts.oauth2;
+  }
+  /** Must be called from a tap (Google opens a pop-up). */
+  async youtubeConnect() {
+    const s = await this._settings();
+    if (!s.youtube?.clientId) throw new Error('حط Client ID بتاع Google في الإعدادات الأول');
+    const oauth2 = await this._gis();
+    const r = await new Promise((res, rej) => {
+      const tc = oauth2.initTokenClient({ client_id: s.youtube.clientId, scope: YT_SCOPES, callback: x => (x.error ? rej(new Error(x.error_description || x.error)) : res(x)), error_callback: e => rej(new Error(e?.type === 'popup_closed' ? 'اتقفلت نافذة Google' : e?.message || 'Google sign-in failed')) });
+      tc.requestAccessToken({ prompt: s.youtube.channel ? '' : 'consent' });
+    });
+    sessionStorage.setItem('reel.yt', JSON.stringify({ token: r.access_token, exp: Date.now() + (r.expires_in || 3600) * 1000 }));
+    const channel = await getChannel({ accessToken: r.access_token }).catch(() => null);
+    await this.saveSettings({ youtube: { channel } });
+    return { connected: true, channel };
+  }
+  async youtubeDisconnect() {
+    const t = this._ytToken();
+    sessionStorage.removeItem('reel.yt');
+    try { if (t) (await this._gis()).revoke(t, () => {}); } catch {}
+    await this.saveSettings({ youtube: { channel: null } });
+  }
+  youtubeUpload(id, meta) { return this.pipeline.youtubeUpload(id, meta || {}); }
   async models(backup) { const s = await this._settings(); const cfg = backup ? (s.llmBackups || []).find(b => b.id === backup) : s.llm; if (!cfg) throw new Error('Unknown provider'); return { models: await listModels({ ...cfg }) }; }
   async voices() { const s = await this._settings(); return { voices: await elevenVoices({ ...s.eleven }) }; }
   async listProjects() {

@@ -17,6 +17,10 @@ export class RemoteBackend {
   getSettings() { return req('/api/settings'); }
   saveSettings(patch) { return req('/api/settings', { method: 'PUT', body: patch }); }
   voices() { return req('/api/voices'); }
+  youtubeStatus() { return req('/api/youtube'); }
+  async youtubeConnect() { const { url } = await req('/api/youtube/connect'); location.href = url; return new Promise(() => {}); }
+  youtubeDisconnect() { return req('/api/youtube/disconnect', { method: 'POST' }); }
+  youtubeUpload(id, meta) { return req(`/api/projects/${id}/youtube`, { method: 'POST', body: meta || {} }); }
   models(backup) { return req('/api/models' + (backup ? `?backup=${encodeURIComponent(backup)}` : '')); }
   ideas(b) { return req('/api/ideas', { method: 'POST', body: b }); }
   batch(topics, options) { return req('/api/batch', { method: 'POST', body: { topics, options } }); }
