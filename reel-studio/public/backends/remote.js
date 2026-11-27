@@ -17,7 +17,7 @@ export class RemoteBackend {
   getSettings() { return req('/api/settings'); }
   saveSettings(patch) { return req('/api/settings', { method: 'PUT', body: patch }); }
   voices() { return req('/api/voices'); }
-  models() { return req('/api/models'); }
+  models(backup) { return req('/api/models' + (backup ? `?backup=${encodeURIComponent(backup)}` : '')); }
   ideas(b) { return req('/api/ideas', { method: 'POST', body: b }); }
   batch(topics, options) { return req('/api/batch', { method: 'POST', body: { topics, options } }); }
   batchState() { return req('/api/batch'); }

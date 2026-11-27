@@ -44,8 +44,8 @@ async function fillSettings() {
   await keys.nth(2).fill('dg-test-key-4444');
   void set; void inputs;
   await page.click('text=⟳ تحميل الأصوات');
-  await page.waitForFunction(() => document.querySelectorAll('select option').length >= 2);
-  await page.selectOption('select', 'mock-voice-eg');
+  await page.waitForSelector('select option[value="mock-voice-eg"]', { state: 'attached' });
+  await page.selectOption('select:has(option[value="mock-voice-eg"])', 'mock-voice-eg');
   await page.click('text=حفظ الإعدادات');
   await sleep(400);
   const masked = await keys.nth(1).inputValue();

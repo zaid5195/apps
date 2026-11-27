@@ -397,7 +397,7 @@ export function createRenderer(canvas, data, { fontFamily = 'Reel' } = {}) {
     const a = eo(ramp(t, t0, 0.45));
     if (a <= 0) return;
     ctx.save();
-    ctx.globalAlpha = a * 0.88; ctx.fillStyle = C.bg; ctx.fillRect(0, 0, DW, DH); ctx.globalAlpha = a;
+    ctx.globalAlpha = a * 0.95; ctx.fillStyle = C.bg; ctx.fillRect(0, 0, DW, DH); ctx.globalAlpha = a;
     const cx = DW / 2, cy = DH * (DH > DW ? 0.42 : 0.4), sc = DH > DW ? 1 : 0.8;
     ctx.translate(cx, cy); ctx.scale(sc, sc);
     glow(0, 0, 320, C.accent, 0.18);
@@ -406,7 +406,7 @@ export function createRenderer(canvas, data, { fontFamily = 'Reel' } = {}) {
     ctx.beginPath(); ctx.arc(0, -120, 92, 0, Math.PI * 2); ctx.fillStyle = C.card; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = C.accent; ctx.stroke();
     ctx.beginPath(); ctx.moveTo(-26, -158); ctx.lineTo(36, -120); ctx.lineTo(-26, -82); ctx.closePath(); ctx.fillStyle = C.accent; ctx.fill();
     ctx.restore();
-    const L1 = LG.follow, L2 = LG.comment;
+    const L1 = style.followText || LG.follow, L2 = style.commentText || LG.comment;
     label(style.handle || data.series, 0, 30, { size: 54, alpha: eo(ramp(t, t0 + 0.35, 0.4)), maxW: 600, lines: 1 });
     label(L1, 0, 100, { size: 32, color: C.sec, alpha: eo(ramp(t, t0 + 0.5, 0.4)), maxW: 600 });
     // follow button

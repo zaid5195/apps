@@ -188,6 +188,21 @@ try {
   // ideas
   const ideas = await api('/api/ideas', { method: 'POST', body: { lang: LANG, hint: 'الجسم' } });
   ok(ideas.ideas.length === 10 && ideas.ideas[0].topic, `ideas: ${ideas.ideas.length} (e.g. «${ideas.ideas[0].topic}»)`);
+  // backup LLM providers: main key rejected → the backup answers; keys stay masked
+  const sb1 = await api('/api/settings', { method: 'PUT', body: { llm: { apiKey: 'bad-key' }, llmBackups: [{ id: 'b1', preset: 'groq', name: 'Groq', baseUrl: `http://127.0.0.1:${MOCK}/v1`, model: 'mock-flash-latest', apiKey: 'gsk-backup-secret-7777', enabled: true }] } });
+  ok(sb1.llmBackups[0].apiKey === '••••7777' && !JSON.stringify(sb1).includes('backup-secret'), 'backup provider key stored and shown masked');
+  const sb2 = await api('/api/settings', { method: 'PUT', body: { llmBackups: sb1.llmBackups } });
+  ok(sb2.llmBackups[0].hasKey, 'masked backup key round-trip keeps the key');
+  const viaBackup = await api('/api/ideas', { method: 'POST', body: { lang: LANG } });
+  ok(viaBackup.ideas.length === 10 && viaBackup.log.some(l => /Groq/.test(l)), `main provider failed → backup «Groq» answered (${viaBackup.log.filter(l => /Groq/.test(l)).length} log lines)`);
+  const bm = await api('/api/models?backup=b1');
+  ok(bm.models.includes('mock-flash-latest'), 'load models for a backup provider');
+  await api('/api/settings', { method: 'PUT', body: { llm: { apiKey: 'sk-llm-secret-1234' }, llmBackups: [] } });
+  // custom end-screen text
+  await api(`/api/projects/${id}/style`, { method: 'POST', body: { handle: '@my_new_name', endFollow: 'اشترك عشان يوصلك الجديد', endComment: 'تحب نشرح إيه بعد كده؟' } });
+  const rdS = await api(`/api/projects/${id}/render-data`);
+  ok(rdS.data.style.handle === '@my_new_name' && rdS.data.style.followText === 'اشترك عشان يوصلك الجديد' && rdS.data.style.commentText === 'تحب نشرح إيه بعد كده؟', 'end screen name + texts are editable per project');
+
   // free Gemini voice + estimated timings, through a 2-topic batch (and a retired TTS model)
   await api('/api/settings', { method: 'PUT', body: { eleven: { apiKey: '' }, deepgram: { apiKey: '' }, gemini: { apiKey: 'g-test-key', baseUrl: `http://127.0.0.1:${MOCK}/v1beta`, ttsModel: 'retired-tts' } } });
   const bt = await api('/api/batch', { method: 'POST', body: { topics: [LANG === 'es' ? '¿Por qué soñamos?' : 'ليه بنحلم؟', LANG === 'es' ? '¿Por qué el cielo es azul?' : 'ليه السما زرقا؟'], options: { lang: LANG, length: 10, voiceSource: 'gemini', style: { captions: 'word', music: 'suspense' } } } });

@@ -2,7 +2,7 @@
 import { STAGES, LENGTHS, DEFAULT_STYLE } from './core/pipeline.js';
 import { GEMINI_VOICES } from './core/providers.js';
 import { resolveIcon } from './core/icons.js';
-import { LLM_PRESETS } from './core/defaults.js';
+import { LLM_PRESETS, presetById } from './core/defaults.js';
 import { LANGS } from './core/lang.js';
 import { providerOf, isLocalUrl, fixBaseUrl, providerFromKey, looksLikeKey } from './core/errors.js';
 import { createRenderer, loadFonts } from './render/engine.js';
@@ -28,7 +28,11 @@ function styleControls(st, onChange = () => {}) {
     h('label', {}, 'الموسيقى'), seg(MUSIC_AR, st.music, v => { st.music = v; onChange(); }),
     h('label', {}, 'شكل الترجمة'), seg(CAPTIONS_AR, st.captions, v => { st.captions = v; onChange(); }),
     h('label', {}, 'المقاسات'), fm,
-    h('div', { style: 'margin-top:8px' }, chk('hook', 'بداية خاطفة (الجملة الأولى بخط كبير)'), chk('endScreen', 'شاشة النهاية (تابعني + سؤال للتعليقات)')));
+    h('div', { style: 'margin-top:8px' }, chk('hook', 'بداية خاطفة (الجملة الأولى بخط كبير)'), chk('endScreen', 'شاشة النهاية (تابعني + سؤال للتعليقات)')),
+    h('div', { class: 'grid2' },
+      h('div', {}, h('label', {}, 'الاسم في شاشة النهاية'), h('input', { type: 'text', dir: 'auto', value: st.handle ?? '', placeholder: '@username (من الإعدادات)', oninput: e => { st.handle = e.target.value; onChange(); } })),
+      h('div', {}, h('label', {}, 'السطر تحت الاسم'), h('input', { type: 'text', dir: 'auto', value: st.endFollow ?? '', placeholder: 'تابعني عشان الحلقة الجاية', oninput: e => { st.endFollow = e.target.value; onChange(); } }))),
+    h('label', {}, 'سؤال التعليقات'), h('input', { type: 'text', dir: 'auto', value: st.endComment ?? '', placeholder: 'قولّي في الكومنتات: نشرح إيه المرة الجاية؟', oninput: e => { st.endComment = e.target.value; onChange(); } }));
 }
 const TYPE_AR = { intro: 'بداية', question: 'سؤال', concept: 'فكرة', process: 'خطوات', compare: 'مقارنة', stat: 'رقم', recap: 'خلاصة' };
 
@@ -96,9 +100,10 @@ async function viewHome() {
   const settings = await be.getSettings();
   const llmPr = providerOf(settings.llm.baseUrl);
   const missing = [];
-  if (!settings.has?.llm && !isLocalUrl(settings.llm.baseUrl)) missing.push([llmPr.name, llmPr.link]);
+  const hasBackup = (settings.llmBackups || []).some(b => b.hasKey && b.enabled !== false);
+  if (!settings.has?.llm && !isLocalUrl(settings.llm.baseUrl) && !hasBackup) missing.push([llmPr.name, llmPr.link]);
   if (!settings.has?.eleven) missing.push(['ElevenLabs', 'https://elevenlabs.io/app/developers/']);
-  if (be.mode === 'local' && isLocalUrl(settings.llm.baseUrl)) missing.push(['LLM أونلاين (FreeLLMAPI ما يشتغلش من الهاتف)', '']);
+  if (be.mode === 'local' && isLocalUrl(settings.llm.baseUrl) && !hasBackup) missing.push(['LLM أونلاين (FreeLLMAPI ما يشتغلش من الهاتف)', '']);
   let length = +(localStorage.getItem('reel.length') || 10);
   let voiceSource = localStorage.getItem('reel.voice') || 'tts';
   const style = { ...DEFAULT_STYLE, ...(settings.style || {}) };
@@ -520,6 +525,37 @@ async function viewSettings() {
   };
   const key = (path, link) => h('div', {}, h('div', { class: 'keyrow' }, inp(path, { type: 'password', class: 'ltr', autocomplete: 'off', placeholder: 'الصق المفتاح هنا' })), link ? h('div', { class: 'hint' }, 'هات مفتاح من ', h('a', { href: link, target: '_blank', rel: 'noopener' }, link)) : null);
   const llmKeyHint = h('div', { class: 'hint' });
+  // ---- backup LLM providers
+  const backups = (s.llmBackups || []).map(b => ({ ...b }));
+  const backupsBox = h('div');
+  const drawBackups = () => backupsBox.replaceChildren(...backups.map((b, i) => {
+    const pr = presetById(b.preset);
+    const mlist = h('datalist', { id: 'bm-' + i });
+    const model = h('input', { type: 'text', class: 'ltr', value: b.model || '', placeholder: pr?.model || 'model', list: 'bm-' + i, oninput: e => (b.model = e.target.value.trim()) });
+    return h('div', { class: 'scene', style: 'margin-bottom:8px' },
+      h('div', { class: 'row' },
+        h('label', { class: 'row grow', style: 'gap:8px;color:var(--text);margin:0' }, h('input', { type: 'checkbox', checked: b.enabled !== false, onchange: e => (b.enabled = e.target.checked) }), h('b', {}, `${i + 1}. ${b.name || pr?.name || 'مزوّد'}`)),
+        i > 0 ? h('button', { class: 'ghost sm', type: 'button', title: 'لفوق', onclick: () => { [backups[i - 1], backups[i]] = [backups[i], backups[i - 1]]; drawBackups(); } }, '↑') : null,
+        h('button', { class: 'danger sm', type: 'button', onclick: () => { backups.splice(i, 1); drawBackups(); } }, '✕')),
+      h('input', { type: 'password', class: 'ltr', autocomplete: 'off', value: b.apiKey || '', placeholder: pr?.local ? 'مفتاح (اختياري)' : 'الصق المفتاح هنا', oninput: e => (b.apiKey = e.target.value) }),
+      pr?.keyLink && !pr.local ? h('div', { class: 'hint' }, 'هات مفتاح', pr.free ? ' مجاني' : '', ' من: ', h('a', { href: pr.keyLink, target: '_blank', rel: 'noopener' }, pr.keyLink)) : null,
+      h('div', { class: 'keyrow', style: 'margin-top:6px' }, model, mlist,
+        h('button', { class: 'sm', type: 'button', title: 'تحميل الموديلات', onclick: async () => {
+          await save(true);
+          const { models } = await guard(() => be.models(b.id));
+          mlist.replaceChildren(...models.map(m => h('option', { value: m })));
+          if (models.length && !models.includes(b.model)) { b.model = model.value = models[0]; }
+          toast(`${models.length} موديل`);
+        } }, '⟳')),
+      pr ? null : h('input', { type: 'url', class: 'ltr', style: 'margin-top:6px', value: b.baseUrl || '', placeholder: 'Base URL (OpenAI-compatible)', oninput: e => (b.baseUrl = e.target.value.trim()) }));
+  }));
+  drawBackups();
+  const addBackupSel = h('select', { onchange: e => {
+    const pr = presetById(e.target.value);
+    if (e.target.value === 'custom') backups.push({ id: 'b' + Date.now().toString(36), preset: '', name: 'Custom', baseUrl: '', model: '', apiKey: '', enabled: true });
+    else if (pr) backups.push({ id: 'b' + Date.now().toString(36), preset: pr.id, name: pr.name, baseUrl: pr.baseUrl, model: pr.model, apiKey: '', enabled: true });
+    e.target.value = ''; drawBackups();
+  } }, h('option', { value: '' }, '+ زيد مزوّد احتياطي…'), ...LLM_PRESETS.filter(p => !p.local).map(p => h('option', { value: p.id }, `${p.name}${p.free ? ' (فيه مجاني)' : ''}`)), h('option', { value: 'custom' }, 'مزوّد آخر (OpenAI-compatible)'));
   const modelList = h('datalist', { id: 'llm-models' });
   const loadModels = h('button', { class: 'sm', type: 'button', title: 'تحميل الموديلات المتاحة', onclick: async () => {
     await save(true);
@@ -548,7 +584,7 @@ async function viewSettings() {
   const approvals = { ...s.approvals };
 
   async function save(quiet) {
-    const patch = { llm: {}, eleven: {}, deepgram: {}, gemini: { voice: gemVoice.value }, approvals, stt, renderer, selfReview, style: defStyle };
+    const patch = { llm: {}, eleven: {}, deepgram: {}, gemini: { voice: gemVoice.value }, approvals, stt, renderer, selfReview, style: defStyle, llmBackups: backups.map(b => ({ ...b })) };
     for (const [path, el] of Object.entries(f)) {
       if (el.disabled) continue;
       const parts = path.split('.');
@@ -570,6 +606,9 @@ async function viewSettings() {
     }
     s = await guard(() => be.saveSettings(patch), quiet ? null : 'اتحفظ ✓' + (notes.length ? ' — ' + notes.join('، ') : ''));
     for (const [path, el] of Object.entries(f)) if (el.type === 'password') el.value = path.split('.').reduce((a, k) => a?.[k], s) || '';
+    const saved = new Map((s.llmBackups || []).map(b => [b.id, b]));
+    backups.forEach(b => { if (saved.has(b.id)) b.apiKey = saved.get(b.id).apiKey; });
+    drawBackups();
   }
 
   const fontBlock = be.mode === 'local'
@@ -584,6 +623,9 @@ async function viewSettings() {
       h('label', {}, 'Base URL'), inp('llm.baseUrl', { class: 'ltr' }),
       h('div', { class: 'grid2' }, h('div', {}, h('label', {}, 'Model'), h('div', { class: 'keyrow' }, inp('llm.model', { class: 'ltr', list: 'llm-models' }), loadModels), modelList), h('div', {}, h('label', {}, 'Temperature'), inp('llm.temperature', { type: 'number', step: '0.1', min: 0, max: 2, class: 'ltr' }))),
       h('label', {}, 'API key (مطلوب لـ Gemini / Groq / OpenRouter — اختياري لـ FreeLLMAPI)'), key('llm.apiKey'), llmKeyHint,
+      h('hr'), h('h3', {}, '🔁 مزوّدين احتياطيين'),
+      h('div', { class: 'hint' }, 'لو الأساسي فشل أو مزحوم أو خلص الحد المجاني، البرنامج بيجرّب دول بالترتيب لوحده. أغلبهم عندهم خطة مجانية. (على الهاتف: بعض المزوّدين ممكن يرفضوا الطلب من المتصفح — جرّب Gemini / Groq / OpenRouter الأول.)'),
+      backupsBox, h('div', { class: 'row', style: 'margin-top:8px' }, addBackupSel),
       h('label', { class: 'row', style: 'gap:8px' }, h('input', { type: 'checkbox', checked: selfReview, onchange: e => (selfReview = e.target.checked) }), 'مراجعة ذاتية للستوري بورد (تمريرة تانية تحسّن الاختيارات)')),
     h('div', { class: 'card' }, h('h2', {}, '2. الصوت — ElevenLabs'),
       h('label', {}, 'API key'), key('eleven.apiKey', 'https://elevenlabs.io/app/developers/'),
@@ -601,7 +643,8 @@ async function viewSettings() {
     h('div', { class: 'card' }, h('h2', {}, '4. الشكل والرندر'),
       h('div', { class: 'grid2' }, h('div', {}, h('label', {}, 'اسم السلسلة — عربي'), inp('seriesTag')), h('div', {}, h('label', {}, 'اسم السلسلة — Español'), inp('seriesTagEs', { dir: 'ltr' }))),
       fontBlock,
-      h('label', {}, 'حسابك (يظهر في شاشة النهاية والغلاف)'), inp('handle', { dir: 'ltr', placeholder: '@username' }),
+      h('label', {}, 'اسمك / حسابك (يظهر في شاشة النهاية والغلاف — بدّله زي ما تحب)'), inp('handle', { dir: 'auto', placeholder: '@username' }),
+      h('div', { class: 'grid2' }, h('div', {}, h('label', {}, 'السطر تحت الاسم (فاضي = الافتراضي)'), inp('endFollow', { dir: 'auto', placeholder: 'تابعني عشان الحلقة الجاية' })), h('div', {}, h('label', {}, 'سؤال التعليقات (فاضي = الافتراضي)'), inp('endComment', { dir: 'auto', placeholder: 'قولّي في الكومنتات: نشرح إيه المرة الجاية؟' }))),
       h('label', {}, 'الشكل الافتراضي للمشاريع الجديدة'), defStyleBox,
       h('label', {}, 'مستوى المؤثرات الصوتية (0 = بدون، 1 = عادي)'), inp('sfxLevel', { type: 'number', step: '0.1', min: 0, max: 2, class: 'ltr' }),
       be.mode === 'server' ? h('div', {}, h('label', {}, 'محرك الرندر'), seg([['auto', 'تلقائي'], ['server', 'Chromium + ffmpeg'], ['browser', 'المتصفح (WebCodecs)']], renderer, v => (renderer = v))) : null,
