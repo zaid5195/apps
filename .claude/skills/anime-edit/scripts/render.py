@@ -10,6 +10,9 @@ Config keys used here (see examples/killua.json):
          mode: intro | pan | free | flicker | push
          focus: x centre of interest 0..1, or [from, to] for a pan; fy: y centre
   drop_images: [{img, focus, fy}]               cut on every kick from drop to drop_end
+  Any shot / drop image / end_image can be a video clip instead of an image:
+    {"video": "clip.mp4", "from": 12.3, "speed": 0.5, "focus": 0.5, "fy": 0.5}
+    (files in clips_dir; speed 0.5 = slow motion; crops 9:16 around focus)
   end_image: {img, focus, fy}                   title card shot
   title: [line1, line2], subtitle
   colors: {accent, intro_tint, drop_tint, spark}
@@ -59,6 +62,75 @@ for i, k in enumerate(drop_k):
 shots.append((DROP_END, TOTAL + 1, cfg["end_image"], "end"))
 
 cache = {}
+CW, CH = int(W * 1.12), int(H * 1.12)       # source size: 9:16 + 12% room to zoom/shake
+
+
+def grade(a, mode):
+    """Numpy version of the still-image look, used per video frame."""
+    a = a.astype(np.float32)
+    g = a.mean(2, keepdims=True)
+    if mode in ("intro", "pan"):
+        a = g + (a - g) * 0.55
+        a = (a - 128) * 1.15 + 128
+        a = a * 0.85 + INTRO_TINT * 0.15 * (g / 255 + 0.2)
+    elif mode in ("drop", "flicker", "push"):
+        a = g + (a - g) * 1.25
+        a = (a - 128) * 1.2 + 128
+        a = a * 0.88 + DROP_TINT * 0.12 * (g / 255 + 0.3)
+    return np.clip(a, 0, 255).astype(np.uint8)
+
+
+class Clip:
+    """Streams one video shot: crop to 9:16 around focus/fy, scale, retime.
+    spec: {"video": file, "from": sec, "speed": 1.0 (0.5 = slow motion), "focus", "fy"}"""
+
+    def __init__(self, spec, mode, dur):
+        path = os.path.join(cfg.get("clips_dir", IMG_DIR), spec["video"])
+        iw, ih = (int(x) for x in subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",
+             "-of", "csv=p=0", path], capture_output=True, text=True).stdout.strip().split(",")[:2])
+        ch = ih
+        cw = int(ch * 9 / 16) // 2 * 2
+        if cw > iw:
+            cw = iw // 2 * 2
+            ch = int(cw * 16 / 9) // 2 * 2
+        x = int(min(max(spec.get("focus", 0.5) * iw - cw / 2, 0), iw - cw))
+        y = int(min(max(spec.get("fy", 0.5) * ih - ch / 2, 0), ih - ch))
+        speed = spec.get("speed", 1.0)
+        vf = f"setpts=PTS/{speed},fps={FPS},crop={cw}:{ch}:{x}:{y},scale={CW}:{CH}:flags=bicubic,unsharp=5:5:0.6"
+        need = dur * speed + 1
+        self.p = subprocess.Popen(["ffmpeg", "-loglevel", "error", "-ss", str(spec.get("from", 0)), "-t", f"{need:.2f}",
+                                   "-i", path, "-an", "-vf", vf, "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+                                  stdout=subprocess.PIPE)
+        self.mode, self.n, self.last = mode, 0, None
+
+    def frame(self, k):
+        while self.n <= k:
+            buf = self.p.stdout.read(CW * CH * 3)
+            if len(buf) < CW * CH * 3:          # clip ended: hold the last frame
+                break
+            self.last = grade(np.frombuffer(buf, np.uint8).reshape(CH, CW, 3), self.mode)
+            self.n += 1
+        if self.last is None:
+            raise SystemExit(f"could not read video frames for shot ({self.mode})")
+        return self.last
+
+    def close(self):
+        self.p.stdout.close()
+        self.p.kill()
+
+
+clips = {}
+
+
+def video_frame(shot, t):
+    s0, s1, spec, mode = shot
+    key = id(shot)
+    if key not in clips:
+        for k in list(clips):                    # shots run in order: close finished readers
+            clips.pop(k).close()
+        clips[key] = Clip(spec, mode, s1 - s0)
+    return clips[key].frame(int((t - s0) * FPS))
 
 
 def src(spec, mode):
@@ -177,14 +249,18 @@ ff = subprocess.Popen(
 
 for fi in range(nframes):
     t = fi / FPS
-    s0, s1, spec, mode = next(s for s in shots if s[0] <= t < s[1])
-    a = src(spec, mode)
+    shot = next(s for s in shots if s[0] <= t < s[1])
+    s0, s1, spec, mode = shot
+    is_video = "video" in spec
+    a = video_frame(shot, t) if is_video else src(spec, mode)
     p = (t - s0) / (s1 - s0)
     foc = spec.get("focus", 0.5)
     if isinstance(foc, list):
         e = p * p * (3 - 2 * p)
         foc = foc[0] + (foc[1] - foc[0]) * e
     fyc = spec.get("fy", 0.5)
+    if is_video:                                  # already cropped around focus/fy
+        foc, fyc = 0.5, 0.5
     z, dx, dy = 1.0, 0.0, 0.0
     if mode == "intro":
         z = 1.0 + 0.1 * p
@@ -253,6 +329,8 @@ for fi in range(nframes):
     if fi % (FPS * 10) == 0:
         print(f"{t:5.1f}s / {TOTAL}s", flush=True)
 
+for c in clips.values():
+    c.close()
 ff.stdin.close()
 ff.wait()
 print("done" if ff.returncode == 0 else "ffmpeg failed", OUT)
