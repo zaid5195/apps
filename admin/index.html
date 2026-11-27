@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>لوحة التحكم</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b1220; --card: #141f36; --card2: #18243f; --line: rgba(255,255,255,.1); --text: #f1f5f9;
+    --muted: #94a3b8; --accent: #4ade80; --blue: #60a5fa; --red: #f87171; --amber: #fbbf24;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Cairo', system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; min-height: 100vh; }
+  main { max-width: 640px; margin: 0 auto; padding: 16px 16px 120px; }
+  h1 { font-size: 26px; font-weight: 900; margin: 10px 0 4px; }
+  h2 { font-size: 20px; font-weight: 800; }
+  h3 { font-size: 16px; font-weight: 800; margin-bottom: 8px; }
+  p.sub { color: var(--muted); margin-bottom: 18px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 16px; margin-bottom: 14px; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .stat { background: var(--card2); border-radius: 16px; padding: 12px 8px; text-align: center; }
+  .stat b { display: block; font-size: 26px; font-weight: 900; line-height: 1.2; }
+  .stat span { color: var(--muted); font-size: 13px; font-weight: 700; }
+  details.app { background: var(--card); border: 1px solid var(--line); border-radius: 20px; margin-bottom: 14px; overflow: hidden; }
+  details.app[open] { border-color: rgba(74,222,128,.35); }
+  summary { list-style: none; display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer; }
+  summary::-webkit-details-marker { display: none; }
+  summary .chev { margin-right: auto; color: var(--muted); transition: transform .2s; }
+  details[open] summary .chev { transform: rotate(180deg); }
+  .app-body { padding: 0 16px 16px; }
+  .icon { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 26px; flex: none; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+  .status { font-size: 12px; font-weight: 700; padding: 1px 9px; border-radius: 999px; }
+  .ok { background: rgba(74,222,128,.15); color: var(--accent); }
+  .bad { background: rgba(248,113,113,.15); color: var(--red); }
+  .warn { background: rgba(251,191,36,.15); color: var(--amber); }
+  .info { background: rgba(96,165,250,.15); color: var(--blue); }
+  .section { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; }
+  .row .lbl { font-weight: 700; }
+  .hint { color: var(--muted); font-size: 13px; font-weight: 500; display: block; }
+  .sw { position: relative; width: 56px; height: 32px; flex: none; }
+  .sw input { opacity: 0; width: 0; height: 0; }
+  .sw span { position: absolute; inset: 0; background: #334155; border-radius: 999px; transition: .2s; cursor: pointer; }
+  .sw span::before { content: ""; position: absolute; width: 24px; height: 24px; top: 4px; right: 4px; background: #fff; border-radius: 50%; transition: .2s; }
+  .sw input:checked + span { background: var(--accent); }
+  .sw input:checked + span::before { transform: translateX(-24px); }
+  .sw.danger input:checked + span { background: var(--red); }
+  label.f { display: block; font-weight: 700; font-size: 14px; margin-top: 10px; }
+  textarea, input[type=text], input[type=password], input[type=url], input[type=number] {
+    width: 100%; font: inherit; color: var(--text); background: rgba(0,0,0,.3); border: 1px solid var(--line);
+    border-radius: 12px; padding: 10px 12px; margin-top: 6px;
+  }
+  input[type=url], input[type=password], input.ltr { direction: ltr; text-align: left; }
+  input[type=number] { width: 110px; direction: ltr; text-align: center; }
+  input.emoji { width: 80px; text-align: center; font-size: 22px; }
+  textarea { min-height: 70px; resize: vertical; }
+  button { font: inherit; font-weight: 800; border: 0; border-radius: 14px; padding: 12px 18px; cursor: pointer; }
+  .btn { background: var(--accent); color: #052e16; width: 100%; font-size: 17px; }
+  .btn2 { background: rgba(255,255,255,.08); color: var(--text); border: 1px solid var(--line); }
+  .btn3 { background: rgba(248,113,113,.12); color: var(--red); border: 1px solid rgba(248,113,113,.3); }
+  .btn:disabled { opacity: .5; }
+  .btns { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .btns button { flex: 1; }
+  .note { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .current-msg { background: rgba(96,165,250,.1); border: 1px solid rgba(96,165,250,.3); border-radius: 12px; padding: 10px; margin-top: 8px; font-size: 14px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 6px; }
+  td { padding: 6px 4px; border-bottom: 1px solid var(--line); }
+  td.n { text-align: left; font-weight: 800; direction: ltr; }
+  .bigdl { font-size: 34px; font-weight: 900; color: var(--accent); }
+  ol.steps { padding-right: 20px; display: grid; gap: 8px; margin: 10px 0; }
+  ol.steps li::marker { color: var(--accent); font-weight: 900; }
+  a { color: var(--blue); }
+  code { direction: ltr; unicode-bidi: embed; background: rgba(0,0,0,.35); padding: 1px 6px; border-radius: 6px; font-size: 13px; }
+  .savebar { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(11,18,32,.95); border-top: 1px solid var(--line); padding: 12px 16px; display: none; backdrop-filter: blur(6px); }
+  .savebar.show { display: block; }
+  .savebar div { max-width: 640px; margin: 0 auto; }
+  .toast { background: #0f172a; border: 1px solid var(--line); box-shadow: 0 10px 30px rgba(0,0,0,.5); position: fixed; top: 16px; left: 16px; right: 16px; max-width: 600px; margin: 0 auto; padding: 12px 16px; border-radius: 14px; font-weight: 700; display: none; z-index: 10; text-align: center; }
+  .toast.show { display: block; }
+  .top { display: flex; justify-content: space-between; align-items: center; }
+  .logout { background: none; color: var(--muted); padding: 6px; font-size: 14px; }
+  .group-title { color: var(--muted); font-weight: 800; font-size: 14px; margin: 18px 4px 8px; }
+  .bars { display: flex; align-items: flex-end; gap: 6px; height: 90px; margin-top: 10px; }
+  .bar { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+  .bar i { display: block; width: 100%; background: var(--blue); border-radius: 6px 6px 2px 2px; min-height: 3px; }
+  .bar.today i { background: var(--accent); }
+  .bar b { font-size: 11px; color: var(--text); }
+  .bar span { font-size: 10px; color: var(--muted); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="toast" id="toast"></div>
+<main>
+  <div class="top">
+    <h1>🎛️ لوحة التحكم</h1>
+    <button class="logout" id="logout" hidden>تسجيل خروج</button>
+  </div>
+  <p class="sub">تحكّم في كل تطبيقاتك من مكان واحد.</p>
+
+  <!-- Login -->
+  <section id="login" class="card" hidden>
+    <h2>🔑 الدخول (مرة وحدة بس)</h2>
+    <p class="note" style="font-size:15px">اللوحة تحتاج «مفتاح دخول» من GitHub عشان تقدر تعدّل إعدادات تطبيقاتك. المفتاح يبقى في متصفح جوالك بس، وما يقدر أحد غيرك يستخدم اللوحة بدونه.</p>
+    <ol class="steps">
+      <li>افتح <a id="token-link" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">صفحة إنشاء المفتاح في GitHub</a>.</li>
+      <li>في <b>Token name</b> اكتب: <code>control-panel</code></li>
+      <li>في <b>Expiration</b> اختر مدة طويلة (مثلاً 1 year).</li>
+      <li>في <b>Repository access</b> اختر <b>Only select repositories</b> ثم اختر <code>apps</code>.</li>
+      <li>في <b>Permissions</b> ← <b>Repository permissions</b> ← <b>Contents</b> اختر <b>Read and write</b>.</li>
+      <li>انزل تحت واضغط <b>Generate token</b>، وانسخ المفتاح (يبدأ بـ <code>github_pat_</code>).</li>
+      <li>الصقه هنا واضغط دخول.</li>
+    </ol>
+    <input type="password" id="token" placeholder="github_pat_..." autocomplete="off">
+    <div class="btns"><button class="btn" id="login-btn">دخول</button></div>
+    <p class="note" id="login-err"></p>
+  </section>
+
+  <section id="loading" class="card" hidden><p>⏳ جاري التحميل…</p></section>
+
+  <div id="dash" hidden>
+    <section class="card">
+      <div class="stats">
+        <div class="stat"><b id="st-apps">0</b><span>📱 تطبيق متاح</span></div>
+        <div class="stat"><b id="st-dl">0</b><span>⬇️ تحميل</span></div>
+        <div class="stat"><b id="st-soon">0</b><span>🔜 قريباً</span></div>
+      </div>
+      <div class="stats" style="grid-template-columns:1fr 1fr;margin-top:10px">
+        <div class="stat"><b id="st-today">–</b><span>👥 استخدموها اليوم</span></div>
+        <div class="stat"><b id="st-installs">–</b><span>📲 تثبيت (من نسخة 1.6)</span></div>
+      </div>
+      <p class="note" id="st-last"></p>
+    </section>
+
+    <section class="card">
+      <h3>📢 رسالة لكل التطبيقات</h3>
+      <textarea id="bc-text" placeholder="مثال: نزل فيديو جديد على تيك توك! 🎬"></textarea>
+      <input type="url" id="bc-url" placeholder="رابط (اختياري) https://...">
+      <div class="btns"><button class="btn2" id="bc-send">✉️ جهّزها لكل التطبيقات</button></div>
+      <p class="note">تطلع مرة وحدة لكل مستخدم في كل تطبيق متاح.</p>
+    </section>
+
+    <div class="group-title" id="g-live">📱 التطبيقات المتاحة</div>
+    <div id="apps-live"></div>
+    <div class="group-title" id="g-soon">🔜 تطبيقات قادمة</div>
+    <div id="apps-soon"></div>
+
+    <details class="app" id="site-settings">
+      <summary><div class="icon" style="background:#1e293b">⚙️</div><div><h2>إعدادات الموقع</h2><span class="hint">روابط القناة وزر «ادعمنا»</span></div><span class="chev">▾</span></summary>
+      <div class="app-body">
+        <label class="f">🎵 رابط تيك توك</label><input type="url" data-link="tiktok" placeholder="https://www.tiktok.com/@...">
+        <label class="f">▶️ رابط يوتيوب (اختياري)</label><input type="url" data-link="youtube" placeholder="https://youtube.com/@...">
+        <label class="f">💚 رابط «ادعمنا» (اختياري)</label><input type="url" data-link="support" placeholder="مثل رابط PayPal.me أو Ko-fi">
+        <p class="note">إذا حطيت رابط «ادعمنا»، يطلع زر في الموقع وداخل التطبيقات (نسخة 1.6 فما فوق). امسحه عشان يختفي.</p>
+      </div>
+    </details>
+
+    <details class="app" id="add">
+      <summary><div class="icon" style="background:#1e293b">➕</div><div><h2>أضف تطبيق قادم</h2><span class="hint">يطلع في الموقع «قريباً» مع اسم صاحب الفكرة</span></div><span class="chev">▾</span></summary>
+      <div class="app-body">
+        <label class="f">اسم التطبيق</label><input type="text" id="new-name" placeholder="مثال: منبّه الصلاة">
+        <label class="f">اسم قصير بالإنجليزي (للرابط)</label><input type="text" class="ltr" id="new-slug" placeholder="prayer-alarm">
+        <label class="f">إيموجي</label><input type="text" class="emoji" id="new-emoji" value="📱" maxlength="4">
+        <label class="f">وصف بسطر</label><input type="text" id="new-tagline" placeholder="وش يسوي التطبيق؟">
+        <label class="f">صاحب الفكرة (اختياري)</label><input type="text" id="new-by" placeholder="@اسم_المتابع">
+        <div class="btns"><button class="btn2" id="new-add">➕ أضفه للقائمة</button></div>
+        <p class="note">لما يجهز التطبيق وينبني في المصنع، يتحول هنا وفي الموقع إلى «متاح» تلقائيًا.</p>
+      </div>
+    </details>
+  </div>
+</main>
+
+<div class="savebar" id="savebar"><div><button class="btn" id="save">💾 حفظ ونشر التغييرات</button></div></div>
+
+<script>
+const OWNER = 'zaid5195', REPO = 'apps', BRANCH = 'main';
+const API = `https://api.github.com/repos/${OWNER}/${REPO}`;
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = n => Number(n || 0).toLocaleString('ar');
+
+$('token-link').href = 'https://github.com/settings/personal-access-tokens/new?' + new URLSearchParams({
+  name: 'control-panel', description: 'لوحة تحكم التطبيقات', target_name: OWNER, expires_in: '366', contents: 'write'
+});
+
+let token = '';
+try { token = localStorage.getItem('gh_token') || ''; } catch {}
+const S = { listing: null, configs: {}, downloads: {}, open: new Set() };
+
+function toast(msg, kind = 'ok') {
+  const t = $('toast'); t.textContent = msg; t.className = `toast show ${kind}`;
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.className = 'toast', 4500);
+}
+async function gh(path, opts = {}) {
+  const r = await fetch(path.startsWith('http') ? path : API + path, {
+    ...opts, cache: 'no-store',
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', ...(opts.headers || {}) },
+  });
+  if (!r.ok) { const e = new Error(`GitHub ${r.status}`); e.status = r.status; throw e; }
+  return r.status === 204 ? null : r.json();
+}
+const b64decode = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\n/g, '')), c => c.charCodeAt(0)));
+const b64encode = s => { const b = new TextEncoder().encode(s); let x = ''; b.forEach(c => x += String.fromCharCode(c)); return btoa(x); };
+async function readJson(path) {
+  const f = await gh(`/contents/${path}?ref=${BRANCH}`);
+  const data = JSON.parse(b64decode(f.content));
+  return { sha: f.sha, data, original: JSON.stringify(data) };
+}
+async function writeJson(path, file, message) {
+  const body = { message, branch: BRANCH, content: b64encode(JSON.stringify(file.data, null, 2) + '\n') };
+  if (file.sha) body.sha = file.sha;
+  const r = await gh(`/contents/${path}`, { method: 'PUT', body: JSON.stringify(body) });
+  file.sha = r.content.sha; file.original = JSON.stringify(file.data);
+}
+const DEFAULT_CFG = slug => ({ maintenance: false, maintenanceMessage: '', minVersionCode: 0, latestVersionCode: 0,
+  updateUrl: `https://zaid5195.github.io/apps/${slug}/`, message: { id: '', text: '', url: '' }, disabledFeatures: [] });
+const isSoon = a => !a.download;
+
+async function login() {
+  $('login-err').textContent = '';
+  const v = $('token').value.trim(); if (!v) return;
+  token = v;
+  try {
+    const repo = await gh('');
+    if (!repo.permissions?.push) throw Object.assign(new Error('no push'), { status: 403 });
+    try { localStorage.setItem('gh_token', token); } catch {}
+    start();
+  } catch (e) {
+    token = '';
+    $('login-err').textContent = e.status === 401 ? '❌ المفتاح غير صحيح أو منتهي.' :
+      e.status === 403 || e.status === 404 ? '❌ المفتاح ما عنده صلاحية على مستودع apps. تأكد من الخطوات 4 و 5.' :
+      '❌ ما قدرت أتصل بـ GitHub. تأكد من الإنترنت وحاول مرة ثانية.';
+  }
+}
+
+// Download counts come from the store's GitHub releases (one release per app version).
+async function loadDownloads() {
+  const by = {};
+  for (let page = 1; page <= 5; page++) {
+    const rels = await gh(`/releases?per_page=100&page=${page}`);
+    for (const r of rels) for (const a of r.assets || []) {
+      const slug = a.name.replace(/\.apk$/, '');
+      (by[slug] ||= { total: 0, versions: [] });
+      by[slug].total += a.download_count;
+      by[slug].versions.push({ name: r.name || r.tag_name, date: (r.published_at || '').slice(0, 10), count: a.download_count });
+    }
+    if (rels.length < 100) break;
+  }
+  S.downloads = by;
+}
+
+// Anonymous usage counters (apps 1.6+): <slug>-installs (once per install) and
+// <slug>-d-YYYYMMDD (once per device per day, UTC). Public counters on abacus.
+const COUNTER = 'https://abacus.jasoncameron.dev/get/uryon29-h/';
+const day = d => d.toISOString().slice(0, 10).replace(/-/g, '');
+async function counter(key) {
+  try { const r = await fetch(COUNTER + key, { cache: 'no-store' }); if (!r.ok) return 0; const v = (await r.json()).value; return v > 0 ? v : 0; } catch { return 0; }
+}
+async function loadUsage() {
+  const out = {};
+  const days = [...Array(7)].map((_, i) => new Date(Date.now() - (6 - i) * 864e5));
+  await Promise.all(S.listing.data.apps.filter(a => !isSoon(a)).map(async a => {
+    const [installs, ...daily] = await Promise.all([counter(`${a.slug}-installs`), ...days.map(d => counter(`${a.slug}-d-${day(d)}`))]);
+    out[a.slug] = { installs, daily: daily.map((n, i) => ({ n, label: days[i].toLocaleDateString('ar', { weekday: 'short' }) })) };
+  }));
+  S.usage = out;
+}
+
+async function start() {
+  $('login').hidden = true; $('loading').hidden = false; $('logout').hidden = false;
+  try {
+    S.listing = await readJson('site/apps.json');
+    S.configs = {};
+    for (const app of S.listing.data.apps) {
+      if (isSoon(app)) continue;
+      try {
+        const f = await readJson(`site/config/${app.slug}.json`);
+        f.data = { ...DEFAULT_CFG(app.slug), ...f.data }; f.data.message = { id: '', text: '', url: '', ...(f.data.message || {}) };
+        f.original = JSON.stringify(f.data); S.configs[app.slug] = f;
+      } catch (e) {
+        if (e.status !== 404) throw e;
+        const data = DEFAULT_CFG(app.slug); S.configs[app.slug] = { sha: null, data, original: JSON.stringify(data) };
+      }
+    }
+    try { await loadDownloads(); } catch { S.downloads = {}; }
+    try { await loadUsage(); } catch { S.usage = {}; }
+    try { const lr = (await readJson('site/last-release.json')).data; S.lastRelease = lr; } catch { S.lastRelease = null; }
+    $('loading').hidden = true; $('dash').hidden = false;
+    renderAll();
+  } catch (e) {
+    $('loading').hidden = true;
+    if (e.status === 401) { logout(); $('login-err').textContent = '❌ انتهت صلاحية المفتاح — سو مفتاح جديد.'; }
+    else toast('❌ صار خطأ في التحميل، حدّث الصفحة.', 'bad');
+  }
+}
+
+function renderAll() {
+  const apps = S.listing.data.apps;
+  const live = apps.filter(a => !isSoon(a)), soon = apps.filter(isSoon);
+  $('st-apps').textContent = fmt(live.length);
+  $('st-soon').textContent = fmt(soon.length);
+  $('st-dl').textContent = fmt(Object.entries(S.downloads).filter(([s]) => apps.some(a => a.slug === s)).reduce((n, [, d]) => n + d.total, 0));
+  const lr = S.lastRelease;
+  $('st-last').textContent = lr ? `🕒 آخر إصدار: ${lr.apps.map(a => (apps.find(x => x.slug === a.slug)?.name || a.slug) + ' ' + a.versionName).join('، ')} — ${new Date(lr.time).toLocaleString('ar')}` : '';
+  const usage = Object.values(S.usage || {});
+  $('st-today').textContent = usage.length ? fmt(usage.reduce((n, u) => n + u.daily[6].n, 0)) : '–';
+  $('st-installs').textContent = usage.length ? fmt(usage.reduce((n, u) => n + u.installs, 0)) : '–';
+  const links = S.listing.data.site.links ||= {};
+  document.querySelectorAll('[data-link]').forEach(inp => {
+    inp.value = links[inp.dataset.link] || '';
+    inp.oninput = () => {
+      const v = inp.value.trim(); v ? links[inp.dataset.link] = v : delete links[inp.dataset.link];
+      // The apps show the support button from their control files.
+      if (inp.dataset.link === 'support') Object.values(S.configs).forEach(f => v ? f.data.supportUrl = v : delete f.data.supportUrl);
+      dirty();
+    };
+  });
+  $('g-soon').hidden = !soon.length;
+  $('apps-live').innerHTML = ''; $('apps-soon').innerHTML = '';
+  live.forEach(a => $('apps-live').appendChild(renderApp(a)));
+  soon.forEach(a => $('apps-soon').appendChild(renderApp(a)));
+  dirty();
+}
+
+function renderApp(app) {
+  const slug = app.slug, soon = isSoon(app), cfg = S.configs[slug]?.data, dl = S.downloads[slug];
+  const el = document.createElement('details');
+  el.className = 'app'; el.open = S.open.has(slug);
+  el.addEventListener('toggle', () => el.open ? S.open.add(slug) : S.open.delete(slug));
+  const chips = soon ? '<span class="status warn">🔜 قريباً</span>' :
+    `<span class="status ${cfg.maintenance ? 'bad' : 'ok'}">${cfg.maintenance ? '🛠️ صيانة' : '🟢 شغّال'}</span>
+     <span class="status info">⬇️ ${fmt(dl?.total || 0)}</span>
+     ${app.version ? `<span class="status info">نسخة ${esc(app.version)}</span>` : ''}
+     ${cfg.disabledFeatures.length ? `<span class="status warn">⚙️ ${cfg.disabledFeatures.length} موقفة</span>` : ''}
+     ${cfg.message.text ? '<span class="status info">📢 رسالة</span>' : ''}`;
+  const forced = cfg && cfg.minVersionCode > 0 && cfg.minVersionCode >= cfg.latestVersionCode;
+  const msgSaved = cfg && JSON.parse(S.configs[slug].original).message?.id === cfg.message.id;
+  el.innerHTML = `
+    <summary>
+      <div class="icon" style="background:${esc(app.color || '#2563eb')}">${esc(app.emoji || '📱')}</div>
+      <div><h2>${esc(app.name)}</h2><div class="chips">${chips}</div></div>
+      <span class="chev">▾</span>
+    </summary>
+    <div class="app-body">
+    ${soon ? '' : `
+      <h3>📊 التحميلات</h3>
+      <div class="bigdl">${fmt(dl?.total || 0)}</div>
+      ${dl?.versions?.length ? `<table>${dl.versions.map(v => `<tr><td>${esc(v.name)}<span class="hint">${esc(v.date)}</span></td><td class="n">${fmt(v.count)}</td></tr>`).join('')}</table>`
+        : '<p class="note">العداد يشتغل من أول نسخة تنزل من المصنع الجديد.</p>'}
+
+      <div class="section">
+        <h3>👥 المستخدمين النشطين</h3>
+        ${(() => { const u = S.usage?.[slug]; if (!u) return '<p class="note">ما قدرت أجيب الأرقام الحين.</p>';
+          const max = Math.max(1, ...u.daily.map(d => d.n));
+          return `<div class="row"><span class="lbl">📲 مرات التثبيت</span><b>${fmt(u.installs)}</b></div>
+            <div class="bars">${u.daily.map((d, i) => `<div class="bar${i === 6 ? ' today' : ''}"><b>${fmt(d.n)}</b><i style="height:${Math.round(d.n / max * 60)}px"></i><span>${esc(d.label)}</span></div>`).join('')}</div>
+            <p class="note">كم جوال فتح التطبيق كل يوم (آخر 7 أيام). يشتغل من نسخة 1.6، والمستخدم يقدر يوقفه من «عن التطبيق».</p>`; })()}
+      </div>
+
+      <div class="section">
+        <div class="row">
+          <span class="lbl">🛠️ وضع الصيانة<span class="hint">يوقف التطبيق عند كل الناس ويطلع لهم رسالة</span></span>
+          <label class="sw danger"><input type="checkbox" data-k="maintenance" ${cfg.maintenance ? 'checked' : ''}><span></span></label>
+        </div>
+        <div ${cfg.maintenance ? '' : 'hidden'}>
+          <textarea data-k="maintenanceMessage" placeholder="نشتغل على تحسين التطبيق، ويرجع قريب إن شاء الله 🛠️">${esc(cfg.maintenanceMessage)}</textarea>
+        </div>
+      </div>
+
+      ${(app.controls || []).length ? `<div class="section"><h3>⚙️ المزايا</h3>
+        ${app.controls.map(c => `<div class="row"><span class="lbl">${esc(c.label)}</span>
+          <label class="sw"><input type="checkbox" data-feature="${esc(c.key)}" ${cfg.disabledFeatures.includes(c.key) ? '' : 'checked'}><span></span></label></div>`).join('')}
+        <p class="note">أخضر = شغّالة. طفّها إذا خربت ميزة وتبي توقفها بس.</p></div>` : ''}
+
+      ${(app.controls || []).some(c => c.key === 'gift_codes') ? `<div class="section"><h3>🎟️ رموز الهدايا</h3>
+        ${(cfg.giftCodes || []).length ? `<table>${cfg.giftCodes.map((g, i) => `<tr><td><b dir="ltr">${esc(g.code)}</b><span class="hint">${[['🍖', g.food], ['🌲', g.wood], ['⚫', g.coal], ['⚙️', g.iron], ['💎', g.gems]].filter(([, n]) => n > 0).map(([e, n]) => e + ' ' + fmt(n)).join('  ')}${g.until ? ` · لين ${esc(g.until)}` : ''}${g.until && g.until < new Date().toISOString().slice(0, 10) ? ' ⌛ منتهي' : ''}</span></td>
+          <td class="n"><button class="btn2" data-delcode="${i}">🗑️</button></td></tr>`).join('')}</table>` : '<p class="note">ما فيه رموز حاليًا.</p>'}
+        <label class="f">الرمز (حروف إنجليزية وأرقام)</label><input type="text" data-gc="code" dir="ltr" placeholder="FROST2026" maxlength="24">
+        <div class="row"><span class="lbl">🍖 أكل</span><input type="number" min="0" data-gc="food" value="0"></div>
+        <div class="row"><span class="lbl">🌲 حطب</span><input type="number" min="0" data-gc="wood" value="0"></div>
+        <div class="row"><span class="lbl">⚫ فحم</span><input type="number" min="0" data-gc="coal" value="0"></div>
+        <div class="row"><span class="lbl">⚙️ حديد</span><input type="number" min="0" data-gc="iron" value="0"></div>
+        <div class="row"><span class="lbl">💎 بلورات</span><input type="number" min="0" data-gc="gems" value="0"></div>
+        <div class="row"><span class="lbl">📅 آخر يوم يشتغل<span class="hint">فاضي = بدون نهاية</span></span><input type="date" data-gc="until" dir="ltr"></div>
+        <div class="btns"><button class="btn2" data-act="addcode">➕ أضف الرمز</button></div>
+        <p class="note">كل لاعب يستخدم الرمز مرة وحدة. بعد «حفظ ونشر» يشتغل خلال ثواني.</p></div>` : ''}
+
+      <div class="section">
+        <h3>📢 رسالة للمستخدمين</h3>
+        ${cfg.message.text ? `<div class="current-msg">${msgSaved ? 'الرسالة الحالية' : '✉️ جاهزة للإرسال (اضغط حفظ)'}: «${esc(cfg.message.text)}» ${cfg.message.url ? '🔗' : ''}</div>` : '<p class="note">ما في رسالة حاليًا.</p>'}
+        <textarea data-msg placeholder="مثال: نزل فيديو جديد على تيك توك! 🎬"></textarea>
+        <input type="url" data-msgurl placeholder="رابط (اختياري) https://...">
+        <div class="btns">
+          <button class="btn2" data-act="send">✉️ جهّز الرسالة</button>
+          ${cfg.message.text ? '<button class="btn2" data-act="clear">🗑️ احذف الرسالة</button>' : ''}
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>⬆️ التحديثات</h3>
+        <div class="row">
+          <span class="lbl">رقم آخر نسخة<span class="hint">يتحدّث تلقائيًا من المصنع — النسخ الأقدم يطلع لها «نسخة جديدة متاحة»</span></span>
+          <input type="number" min="0" data-k="latestVersionCode" value="${cfg.latestVersionCode}">
+        </div>
+        <div class="row">
+          <span class="lbl">إجبار الكل على التحديث<span class="hint">للطوارئ بس: النسخ الأقدم ما تشتغل لين يحدّثون</span></span>
+          <label class="sw danger"><input type="checkbox" data-act="force" ${forced ? 'checked' : ''}><span></span></label>
+        </div>
+      </div>`}
+
+      <div class="section" ${soon ? 'style="border:0;margin-top:0;padding-top:0"' : ''}>
+        <h3>📝 صفحة التطبيق في الموقع</h3>
+        <label class="f">اسم التطبيق</label><input type="text" data-p="name" value="${esc(app.name)}">
+        <label class="f">إيموجي</label><input type="text" class="emoji" data-p="emoji" value="${esc(app.emoji || '📱')}" maxlength="4">
+        <label class="f">وصف بسطر</label><input type="text" data-p="tagline" value="${esc(app.tagline || '')}">
+        <label class="f">💡 صاحب الفكرة</label><input type="text" data-p="suggestedBy" value="${esc(app.suggestedBy || '')}" placeholder="@اسم_المتابع">
+        <label class="f">🎬 رابط فيديو التطبيق (تيك توك)</label><input type="url" data-p="video" value="${esc(app.video || '')}" placeholder="https://www.tiktok.com/@uryon29/video/...">
+        ${soon ? '<div class="btns"><button class="btn3" data-act="remove">🗑️ احذفه من القائمة</button></div>' : ''}
+      </div>
+    </div>`;
+
+  el.querySelectorAll('[data-k]').forEach(inp => inp.addEventListener(inp.type === 'checkbox' ? 'change' : 'input', () => {
+    const k = inp.dataset.k;
+    if (inp.type === 'number' && inp.value.trim() === '') return;
+    cfg[k] = inp.type === 'checkbox' ? inp.checked : inp.type === 'number' ? Math.max(0, parseInt(inp.value, 10) || 0) : inp.value;
+    if (k === 'latestVersionCode' && cfg.minVersionCode > 0) cfg.minVersionCode = cfg.latestVersionCode;
+    if (k === 'maintenance') return renderAll();
+    dirty();
+  }));
+  el.querySelectorAll('input[type=number][data-k]').forEach(inp => inp.addEventListener('blur', () => { if (inp.value.trim() === '') inp.value = cfg[inp.dataset.k]; }));
+  el.querySelectorAll('[data-feature]').forEach(inp => inp.addEventListener('change', () => {
+    const set = new Set(cfg.disabledFeatures); inp.checked ? set.delete(inp.dataset.feature) : set.add(inp.dataset.feature);
+    cfg.disabledFeatures = [...set]; renderAll();
+  }));
+  el.querySelector('[data-act=addcode]')?.addEventListener('click', () => {
+    const val = k => el.querySelector(`[data-gc=${k}]`).value.trim();
+    const code = val('code').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!code) return toast('اكتب الرمز أول (حروف إنجليزية وأرقام)', 'warn');
+    if ((cfg.giftCodes || []).some(g => g.code === code)) return toast('هذا الرمز موجود', 'warn');
+    const n = k => Math.max(0, parseInt(val(k), 10) || 0);
+    const g = { code, food: n('food'), wood: n('wood'), coal: n('coal'), iron: n('iron'), gems: n('gems'), until: val('until') };
+    if (!g.food && !g.wood && !g.coal && !g.iron && !g.gems) return toast('حط هدية واحدة على الأقل', 'warn');
+    cfg.giftCodes = [...(cfg.giftCodes || []), g]; renderAll(); toast('تمام — اضغط «حفظ ونشر» تحت');
+  });
+  el.querySelectorAll('[data-delcode]').forEach(b => b.addEventListener('click', () => {
+    cfg.giftCodes = cfg.giftCodes.filter((_, i) => i !== +b.dataset.delcode); renderAll();
+  }));
+  el.querySelector('[data-act=force]')?.addEventListener('change', e => { cfg.minVersionCode = e.target.checked ? cfg.latestVersionCode : 0; dirty(); });
+  el.querySelector('[data-act=send]')?.addEventListener('click', () => {
+    const text = el.querySelector('[data-msg]').value.trim(), url = el.querySelector('[data-msgurl]').value.trim();
+    if (!text) return toast('اكتب الرسالة أول ✍️', 'warn');
+    if (url && !/^https?:\/\//.test(url)) return toast('الرابط لازم يبدأ بـ https://', 'warn');
+    cfg.message = { id: 'msg-' + Date.now(), text, url }; renderAll(); toast('تمام — اضغط «حفظ ونشر» تحت عشان ترسلها');
+  });
+  el.querySelector('[data-act=clear]')?.addEventListener('click', () => { cfg.message = { id: '', text: '', url: '' }; renderAll(); });
+  el.querySelectorAll('[data-p]').forEach(inp => inp.addEventListener('input', () => {
+    const v = inp.value.trim(); v ? app[inp.dataset.p] = v : delete app[inp.dataset.p];
+    if (inp.dataset.p === 'name' && !v) app.name = inp.defaultValue; dirty();
+  }));
+  el.querySelector('[data-act=remove]')?.addEventListener('click', () => {
+    if (!confirm(`تحذف «${app.name}» من القائمة؟`)) return;
+    S.listing.data.apps = S.listing.data.apps.filter(a => a !== app); renderAll();
+  });
+  return el;
+}
+
+$('bc-send').addEventListener('click', () => {
+  const text = $('bc-text').value.trim(), url = $('bc-url').value.trim();
+  if (!text) return toast('اكتب الرسالة أول ✍️', 'warn');
+  if (url && !/^https?:\/\//.test(url)) return toast('الرابط لازم يبدأ بـ https://', 'warn');
+  const id = 'msg-' + Date.now();
+  Object.values(S.configs).forEach(f => f.data.message = { id, text, url });
+  $('bc-text').value = ''; $('bc-url').value = '';
+  renderAll(); toast('تمام — اضغط «حفظ ونشر» تحت عشان ترسلها لكل التطبيقات');
+});
+
+$('new-add').addEventListener('click', () => {
+  const name = $('new-name').value.trim();
+  const slug = $('new-slug').value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  if (!name) return toast('اكتب اسم التطبيق', 'warn');
+  if (!slug) return toast('اكتب اسم قصير بالإنجليزي (حروف وأرقام)', 'warn');
+  if (S.listing.data.apps.some(a => a.slug === slug)) return toast('هذا الاسم الإنجليزي مستخدم، اختر غيره', 'warn');
+  const app = { slug, name, emoji: $('new-emoji').value.trim() || '📱', color: '#7c3aed', tagline: $('new-tagline').value.trim(), status: 'قريباً' };
+  const by = $('new-by').value.trim(); if (by) app.suggestedBy = by;
+  S.listing.data.apps.push(app);
+  ['new-name', 'new-slug', 'new-tagline', 'new-by'].forEach(id => $(id).value = ''); $('add').open = false;
+  renderAll(); toast('انضاف — اضغط «حفظ ونشر» عشان يطلع في الموقع');
+});
+
+function changes() {
+  const cfgs = Object.entries(S.configs).filter(([, f]) => JSON.stringify(f.data) !== f.original);
+  const listing = S.listing && JSON.stringify(S.listing.data) !== S.listing.original;
+  return { cfgs, listing, any: cfgs.length > 0 || listing };
+}
+function dirty() { $('savebar').classList.toggle('show', changes().any); }
+
+async function save() {
+  const ch = changes(); if (!ch.any) return;
+  $('save').disabled = true; $('save').textContent = '⏳ جاري الحفظ…';
+  try {
+    for (const [slug, f] of ch.cfgs) {
+      const name = S.listing.data.apps.find(a => a.slug === slug)?.name || slug;
+      await writeJson(`site/config/${slug}.json`, f, `لوحة التحكم: تحديث إعدادات ${name}`);
+    }
+    if (ch.listing) await writeJson('site/apps.json', S.listing, 'لوحة التحكم: تحديث صفحات التطبيقات');
+    renderAll();
+    toast(ch.listing ? '✅ انحفظ! التطبيقات تستلمه خلال دقيقة، والموقع يتحدّث خلال دقائق' : '✅ انحفظ! يوصل للتطبيقات خلال دقيقة تقريبًا');
+  } catch (e) {
+    toast(e.status === 409 ? '⚠️ فيه تغيير جديد من مكان ثاني (مثلاً المصنع) — حدّث الصفحة وأعد التعديل' :
+      e.status === 401 ? '❌ انتهت صلاحية المفتاح — سجّل خروج وادخل بمفتاح جديد' : '❌ ما انحفظ، حاول مرة ثانية', 'bad');
+  } finally {
+    $('save').disabled = false; $('save').textContent = '💾 حفظ ونشر التغييرات';
+  }
+}
+
+function logout() {
+  try { localStorage.removeItem('gh_token'); } catch {}
+  token = ''; $('dash').hidden = true; $('login').hidden = false; $('logout').hidden = true; $('savebar').classList.remove('show');
+}
+
+$('login-btn').addEventListener('click', login);
+$('token').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+$('save').addEventListener('click', save);
+$('logout').addEventListener('click', logout);
+window.addEventListener('beforeunload', e => { if (S.listing && changes().any) e.preventDefault(); });
+token ? start() : ($('login').hidden = false);
+</script>
+</body>
+</html>
