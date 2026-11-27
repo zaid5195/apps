@@ -6,6 +6,7 @@ import { LLM_PRESETS, presetById } from './core/defaults.js';
 import { LANGS } from './core/lang.js';
 import { providerOf, isLocalUrl, fixBaseUrl, providerFromKey, looksLikeKey } from './core/errors.js';
 import { createRenderer, loadFonts } from './render/engine.js';
+import { icon } from './ui-icons.js';
 
 const STAGE_AR = { script: 'السكريبت', voice: 'الصوت', timing: 'التوقيت', storyboard: 'الستوري بورد', render: 'الرندر' };
 const STATUS_AR = { idle: 'في الانتظار', running: 'شغّال…', review: 'محتاج موافقتك', done: 'تم', error: 'خطأ' };
@@ -84,95 +85,142 @@ let cleanup = null;
 async function route() {
   cleanup?.(); cleanup = null;
   const hash = location.hash.slice(1) || '/';
-  document.querySelectorAll('[data-nav]').forEach(a => a.classList.toggle('on', (hash.startsWith('/settings') ? 'settings' : hash === '/' ? 'home' : '') === a.dataset.nav));
+  document.querySelectorAll('[data-nav]').forEach(a => a.classList.toggle('on', (hash.startsWith('/settings') ? 'settings' : 'home') === a.dataset.nav));
+  document.querySelectorAll('.overlay').forEach(o => o.remove());
   app.replaceChildren();
   window.scrollTo(0, 0);
   try {
     if (hash.startsWith('/p/')) await viewProject(hash.slice(3));
     else if (hash.startsWith('/settings')) await viewSettings();
     else await viewHome();
-  } catch (e) { app.replaceChildren(h('div', { class: 'card err' }, e.message)); }
+  } catch (e) { app.replaceChildren(h('div', { class: 'page' }, h('div', { class: 'card err' }, e.message))); }
 }
 window.addEventListener('hashchange', route);
 
-// ---------------------------------------------------------------- home
+// ---------------------------------------------------------------- home (workflow list)
+const STATUS_EN = { idle: 'جاهز', running: 'شغّال', review: 'بانتظارك', done: 'نجح', error: 'خطأ' };
+function overallStatus(stages) {
+  const v = STAGES.map(s => stages[s]?.status || stages[s]);
+  if (v.includes('running')) return 'running';
+  if (v.includes('error')) return 'error';
+  if (v.includes('review')) return 'review';
+  if (v.every(x => x === 'done')) return 'done';
+  return 'idle';
+}
+function pill(st) { return h('span', { class: 'pill ' + st }, h('i', { class: 'd' }), STATUS_EN[st]); }
+
+/** Modal dialog. Returns {el, close}. */
+function modal(title, iconName, body, { foot, narrow = false, onClose } = {}) {
+  const ov = h('div', { class: 'overlay' });
+  const close = () => { ov.remove(); document.removeEventListener('keydown', esc); onClose?.(); };
+  const esc = e => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', esc);
+  ov.addEventListener('pointerdown', e => { if (e.target === ov) ov._down = true; });
+  ov.addEventListener('click', e => { if (e.target === ov && ov._down) close(); ov._down = false; });
+  const panel = h('div', { class: 'ndv' + (narrow ? ' narrow' : '') },
+    h('div', { class: 'ndv-head' }, h('span', { class: 'ic' }, icon(iconName, 20)), h('h2', {}, title), h('button', { class: 'ghost icon sm', title: 'إغلاق', onclick: close }, icon('x', 18))),
+    h('div', { class: 'ndv-body' }, body),
+    foot ? h('div', { class: 'ndv-foot' }, foot) : null);
+  ov.append(panel);
+  document.body.append(ov);
+  return { el: ov, panel, close };
+}
+
 async function viewHome() {
   const settings = await be.getSettings();
   const llmPr = providerOf(settings.llm.baseUrl);
   const missing = [];
   const hasBackup = (settings.llmBackups || []).some(b => b.hasKey && b.enabled !== false);
   if (!settings.has?.llm && !isLocalUrl(settings.llm.baseUrl) && !hasBackup) missing.push([llmPr.name, llmPr.link]);
-  if (!settings.has?.eleven) missing.push(['ElevenLabs', 'https://elevenlabs.io/app/developers/']);
+  if (!settings.has?.eleven && !settings.has?.gemini && !(settings.has?.llm && /generativelanguage/.test(settings.llm.baseUrl))) missing.push(['صوت (ElevenLabs أو Gemini)', 'https://elevenlabs.io/app/developers/']);
   if (be.mode === 'local' && isLocalUrl(settings.llm.baseUrl) && !hasBackup) missing.push(['LLM أونلاين (FreeLLMAPI ما يشتغلش من الهاتف)', '']);
-  let length = +(localStorage.getItem('reel.length') || 10);
-  let voiceSource = localStorage.getItem('reel.voice') || 'tts';
-  const style = { ...DEFAULT_STYLE, ...(settings.style || {}) };
-  style.formats = [...(style.formats || ['9:16'])];
-  let lang = localStorage.getItem('reel.lang') || 'ar';
-  const approvals = { ...settings.approvals };
-  const topic = h('textarea', { placeholder: 'مثال: ليه بنتاوب لما نشوف حد بيتاوب؟', rows: 3, style: 'min-height:84px' });
-  const notes = h('input', { type: 'text', placeholder: 'ملاحظات اختيارية للكاتب (زاوية، مصدر، جمهور…)' });
-  const lenChips = h('div', { class: 'chips' }, LENGTHS.map(l => h('span', { class: 'chip' + (l === length ? ' on' : ''), onclick: e => { length = l; localStorage.setItem('reel.length', l); [...e.target.parentNode.children].forEach(c => c.classList.toggle('on', c === e.target)); } }, `${l} ث`)));
-  const langSeg = seg(Object.values(LANGS).map(l => [l.id, (l.id === 'ar' ? '🇪🇬 ' : '🇪🇸 ') + l.name]), lang, v => { lang = v; localStorage.setItem('reel.lang', v); topic.placeholder = v === 'es' ? 'Ejemplo: ¿Por qué bostezamos cuando alguien bosteza?' : 'مثال: ليه بنتاوب لما نشوف حد بيتاوب؟'; });
-  const srcSeg = seg(VOICE_AR, voiceSource, v => { voiceSource = v; localStorage.setItem('reel.voice', v); });
-  const apr = h('div', { class: 'grid2' }, STAGES.map(s => h('div', { class: 'row' }, h('span', { class: 'grow' }, STAGE_AR[s]), seg([['auto', 'تلقائي'], ['wait', 'استناني']], approvals[s], v => (approvals[s] = v)))));
-  const go = h('button', { class: 'primary', onclick: async () => {
-    if (!topic.value.trim()) return toast('اكتب الموضوع الأول', true);
-    go.disabled = true;
-    try {
-      const p = await guard(() => be.createProject({ topic: topic.value.trim(), length, notes: notes.value, approvals, voiceSource, lang, style }));
-      location.hash = '#/p/' + p.id;
-    } finally { go.disabled = false; }
-  } }, '✦ ابدأ الريل');
 
-  // 💡 topic ideas
-  const ideaBox = h('div', { class: 'chips', style: 'margin-top:8px' });
-  const ideaBtn = h('button', { class: 'sm', type: 'button', onclick: async () => {
-    ideaBtn.disabled = true; ideaBtn.textContent = '…كنفكر';
-    try {
-      const { ideas } = await guard(() => be.ideas({ lang, hint: topic.value.trim() }));
-      ideaBox.replaceChildren(...ideas.map(x => h('span', { class: 'chip', dir: 'auto', title: x.hook, onclick: () => { topic.value = x.topic; if (x.hook && !notes.value) notes.value = 'Hook: ' + x.hook; topic.focus(); } }, x.topic)));
-    } finally { ideaBtn.disabled = false; ideaBtn.textContent = '💡 اقترح عليا مواضيع'; }
-  } }, '💡 اقترح عليا مواضيع');
-  // 📋 batch
-  const batchTa = h('textarea', { rows: 5, placeholder: 'موضوع في كل سطر — كلهم هيتعملوا لوحدهم واحد ورا التاني', style: 'min-height:110px' });
-  const batchBtn = h('button', { class: 'blue', type: 'button', onclick: async () => {
-    const topics = batchTa.value.split('\n').map(s => s.trim()).filter(Boolean);
-    if (!topics.length) return toast('اكتب موضوع واحد على الأقل', true);
-    const r = await guard(() => be.batch(topics, { lang, length, voiceSource: voiceSource === 'upload' ? 'tts' : voiceSource, style, notes: notes.value }));
-    toast(`${r.queued.length} ريل في الطابور ✓`); batchTa.value = ''; refreshList();
-  } }, '▶ اعمل الكل');
+  const opts = {
+    length: +(localStorage.getItem('reel.length') || 10),
+    voiceSource: localStorage.getItem('reel.voice') || 'tts',
+    lang: localStorage.getItem('reel.lang') || 'ar',
+    style: { ...DEFAULT_STYLE, ...(settings.style || {}), handle: settings.style?.handle },
+    approvals: { ...settings.approvals },
+  };
+  opts.style.formats = [...(opts.style.formats || ['9:16'])];
+
+  const list = h('div', { class: 'wf-list' }, h('p', { class: 'muted' }, '…'));
   const batchInfo = h('div', { class: 'hint' });
-  const styleBox = styleControls(style);
+  const page = h('div', { class: 'page' },
+    h('div', { class: 'page-head' },
+      h('div', {}, h('h1', {}, 'الريلز'), h('div', { class: 'sub' }, 'كل ريل = workflow: موضوع ← سكريبت ← صوت ← توقيت ← ستوري بورد ← رندر')),
+      h('span', { class: 'spacer' }),
+      h('button', { class: 'sm', onclick: () => openBatch() }, icon('stack', 16), 'دفعة مواضيع'),
+      h('button', { class: 'primary', onclick: () => openNew() }, icon('plus', 18), 'ريل جديد')),
+    missing.length ? h('div', { class: 'banner' }, icon('key', 20),
+      h('div', { class: 'grow' }, h('b', {}, 'ناقص مفاتيح قبل ما تبدأ'),
+        h('div', { class: 'small muted' }, missing.map(([n, l], i) => [i ? ' · ' : '', n, l ? [' (', h('a', { href: l, target: '_blank', rel: 'noopener' }, 'مفتاح مجاني'), ')'] : null]))),
+      h('a', { class: 'btn sm primary', href: '#/settings' }, 'الإعدادات')) : null,
+    batchInfo, list);
+  app.append(page);
 
-  const list = h('div', { class: 'list' }, h('p', { class: 'muted' }, '…'));
-  app.append(...clean(
-    missing.length ? h('div', { class: 'card', style: 'border-color:var(--warn)' },
-      h('b', {}, '⚠️ قبل ما تبدأ: ناقص مفاتيح'),
-      h('ul', { class: 'small' }, missing.map(([n, l]) => h('li', {}, n, l ? [' — ', h('a', { href: l, target: '_blank', rel: 'noopener' }, 'هات مفتاح مجاني')] : null))),
-      h('a', { class: 'btn sm primary', href: '#/settings' }, '⚙ افتح الإعدادات')) : null,
-    h('div', { class: 'card' },
-      h('h1', {}, 'ريل جديد'),
-      h('label', {}, 'الموضوع'), topic, h('div', { class: 'row', style: 'margin-top:6px' }, ideaBtn), ideaBox,
-      h('label', {}, 'لغة الفيديو'), langSeg,
-      h('label', {}, 'مدة الفيديو'), lenChips,
-      h('label', {}, 'التعليق الصوتي'), srcSeg,
-      h('details', {}, h('summary', {}, '🎨 الشكل والموسيقى'), styleBox),
-      h('details', {}, h('summary', {}, 'الموافقات لكل مرحلة + ملاحظات'), h('div', { class: 'hint' }, '«استناني» = توقف المرحلة لحد ما توافق أو تعدّل.'), apr, h('label', {}, 'ملاحظات'), notes),
-      h('div', { class: 'row', style: 'margin-top:14px' }, go),
-    ),
-    h('div', { class: 'card' }, h('h2', {}, '📋 بزاف ديال الريلز مرة وحدة'), h('div', { class: 'hint' }, 'نفس اللغة والمدة والصوت والشكل اللي فوق. كل مرحلة بتمشي تلقائي.'), batchTa, h('div', { class: 'row', style: 'margin-top:8px' }, batchBtn), batchInfo),
-    h('div', { class: 'card' }, h('h2', {}, 'المشاريع'), list),
-  ));
+  function commonFields() {
+    const lenChips = h('div', { class: 'chips' }, LENGTHS.map(l => h('span', { class: 'chip' + (l === opts.length ? ' on' : ''), onclick: e => { opts.length = l; localStorage.setItem('reel.length', l); [...e.target.parentNode.children].forEach(c => c.classList.toggle('on', c === e.target)); } }, `${l} ث`)));
+    const langSeg = seg(Object.values(LANGS).map(l => [l.id, (l.id === 'ar' ? '🇪🇬 ' : '🇪🇸 ') + l.name]), opts.lang, v => { opts.lang = v; localStorage.setItem('reel.lang', v); });
+    const srcSeg = seg(VOICE_AR, opts.voiceSource, v => { opts.voiceSource = v; localStorage.setItem('reel.voice', v); });
+    return [
+      h('div', { class: 'grid2' }, h('div', {}, h('label', {}, 'لغة الفيديو'), langSeg), h('div', {}, h('label', {}, 'التعليق الصوتي'), srcSeg)),
+      h('label', {}, 'المدة'), lenChips,
+      h('details', {}, h('summary', {}, '🎨 الشكل والموسيقى وشاشة النهاية'), styleControls(opts.style)),
+    ];
+  }
+
+  function openNew() {
+    const topic = h('textarea', { placeholder: opts.lang === 'es' ? 'Ejemplo: ¿Por qué bostezamos cuando alguien bosteza?' : 'مثال: ليه بنتاوب لما نشوف حد بيتاوب؟', rows: 3, style: 'min-height:80px' });
+    const notes = h('input', { type: 'text', placeholder: 'ملاحظات اختيارية للكاتب (زاوية، مصدر، جمهور…)' });
+    const ideaBox = h('div', { class: 'chips', style: 'margin-top:8px' });
+    const ideaBtn = h('button', { class: 'sm', type: 'button', onclick: async () => {
+      ideaBtn.disabled = true;
+      try {
+        const { ideas } = await guard(() => be.ideas({ lang: opts.lang, hint: topic.value.trim() }));
+        ideaBox.replaceChildren(...ideas.map(x => h('span', { class: 'chip', dir: 'auto', title: x.hook, onclick: () => { topic.value = x.topic; if (x.hook && !notes.value) notes.value = 'Hook: ' + x.hook; } }, x.topic)));
+      } finally { ideaBtn.disabled = false; }
+    } }, icon('bulb', 16), 'اقترح عليا مواضيع');
+    const apr = h('div', { class: 'grid2' }, STAGES.map(s => h('div', { class: 'row' }, h('span', { class: 'grow' }, STAGE_AR[s]), seg([['auto', 'تلقائي'], ['wait', 'استناني']], opts.approvals[s], v => (opts.approvals[s] = v)))));
+    const go = h('button', { class: 'primary', onclick: async () => {
+      if (!topic.value.trim()) return toast('اكتب الموضوع الأول', true);
+      go.disabled = true;
+      try {
+        const p = await guard(() => be.createProject({ topic: topic.value.trim(), length: opts.length, notes: notes.value, approvals: opts.approvals, voiceSource: opts.voiceSource, lang: opts.lang, style: opts.style }));
+        m.close(); location.hash = '#/p/' + p.id;
+      } finally { go.disabled = false; }
+    } }, icon('play', 18), 'أنشئ وشغّل');
+    const m = modal('ريل جديد', 'bolt', h('div', {},
+      h('label', {}, 'الموضوع (الـ trigger)'), topic, h('div', { class: 'row', style: 'margin-top:6px' }, ideaBtn), ideaBox,
+      ...commonFields(),
+      h('details', {}, h('summary', {}, 'الموافقات لكل خطوة + ملاحظات'), h('div', { class: 'hint' }, '«استناني» = الخطوة تقف لحد ما توافق أو تعدّل.'), apr, h('label', {}, 'ملاحظات'), notes)),
+      { foot: go });
+    setTimeout(() => topic.focus(), 50);
+  }
+
+  function openBatch() {
+    const ta = h('textarea', { rows: 6, placeholder: 'موضوع في كل سطر — كلهم يتعملوا لوحدهم واحد ورا التاني', style: 'min-height:130px' });
+    const go = h('button', { class: 'primary', onclick: async () => {
+      const topics = ta.value.split('\n').map(s => s.trim()).filter(Boolean);
+      if (!topics.length) return toast('اكتب موضوع واحد على الأقل', true);
+      const r = await guard(() => be.batch(topics, { lang: opts.lang, length: opts.length, voiceSource: opts.voiceSource === 'upload' ? 'tts' : opts.voiceSource, style: opts.style }));
+      toast(`${r.queued.length} ريل في الطابور ✓`); m.close(); refreshList();
+    } }, icon('play', 18), 'شغّل الكل');
+    const m = modal('دفعة مواضيع', 'stack', h('div', {}, h('label', {}, 'المواضيع'), ta, ...commonFields()), { foot: go });
+  }
+
   async function refreshList() {
-  const { projects } = await be.listProjects();
-  const bs = await be.batchState?.().catch(() => null);
-  batchInfo.textContent = bs?.pending?.length ? `⏳ في الطابور: ${bs.pending.length} — ${be.mode === 'local' ? 'خلّي الصفحة مفتوحة' : 'تقدر تقفل الصفحة، الكمبيوتر بيكمّل'}` : '';
-  list.replaceChildren(...(projects.length ? projects.map(p => h('a', { class: 'item', href: '#/p/' + p.id },
-    h('div', { class: 'grow' }, h('b', {}, p.title || p.topic), h('span', { class: 'muted small' }, `${p.lang === 'es' ? '🇪🇸' : '🇪🇬'} ${p.length} ث · ${ago(p.updatedAt)}`)),
-    h('div', { class: 'dots', title: 'المراحل' }, STAGES.map(s => h('i', { class: 'dot s-' + p.stages[s] }))),
-  )) : [h('div', { class: 'empty' }, 'لسه مفيش مشاريع — اكتب موضوع فوق وابدأ.')]));
-  return bs;
+    const { projects } = await be.listProjects();
+    const bs = await be.batchState?.().catch(() => null);
+    batchInfo.replaceChildren(...(bs?.pending?.length ? [h('div', { class: 'banner', style: 'border-color:rgba(255,109,90,.35);background:rgba(255,109,90,.06)' }, icon('stack', 18), `في الطابور: ${bs.pending.length} — ${be.mode === 'local' ? 'خلّي الصفحة مفتوحة' : 'الكمبيوتر بيكمّل حتى لو قفلت الصفحة'}`)] : []));
+    list.replaceChildren(...(projects.length ? projects.map(p => {
+      const st = overallStatus(p.stages);
+      return h('a', { class: 'wf', href: '#/p/' + p.id },
+        h('span', { class: 'ic' }, icon(st === 'done' ? 'movie' : 'bolt', 20)),
+        h('div', { class: 'grow' }, h('b', { dir: 'auto' }, p.title || p.topic), h('span', { class: 'meta' }, `${p.lang === 'es' ? '🇪🇸' : '🇪🇬'} ${p.length} ث · آخر تعديل ${ago(p.updatedAt)}`)),
+        h('span', { class: 'mini', title: 'الخطوات' }, STAGES.map((s, i) => [i ? h('u') : null, h('i', { class: 's-' + p.stages[s] })])),
+        pill(st));
+    }) : [h('div', { class: 'empty' }, icon('bolt', 30), h('div', { style: 'margin-top:8px' }, 'لسه مفيش ريلز — اضغط «ريل جديد».'))]));
   }
   await refreshList();
   const timer = setInterval(() => { if (!document.body.contains(list)) return clearInterval(timer); refreshList().catch(() => {}); }, 4000);
@@ -188,43 +236,232 @@ function seg(options, value, onChange) {
 // ---------------------------------------------------------------- project
 async function viewProject(id) {
   let p = await be.getProject(id);
+  const settings = await be.getSettings().catch(() => null);
   const live = { stream: {}, progress: {}, frame: null, editing: {} };
   let preview = null;
-
-  const head = h('div');
-  const stepper = h('div', { class: 'stepper' });
-  const cards = Object.fromEntries(STAGES.map(s => [s, h('section', { class: 'card stage', id: 'st-' + s })]));
-  const actions = h('div', { class: 'sticky-actions' });
-  app.append(...clean(head, stepper, ...STAGES.map(s => cards[s]), actions));
-
+  const cards = Object.fromEntries(STAGES.map(s => [s, h('section', { class: 'stage', id: 'st-' + s })]));
   const running = () => p.running || STAGES.some(s => p.stages[s].status === 'running');
 
+  // ---------------- editor chrome (n8n-style)
+  const titleEl = h('div', { class: 'title' });
+  const statusEl = h('span');
+  const actionsEl = h('div', { class: 'row', style: 'flex-wrap:nowrap' });
+  const canvas = h('div', { class: 'canvas' });
+  const world = h('div', { class: 'world' });
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(SVGNS, 'svg');
+  svg.setAttribute('class', 'edges');
+  const nodesLayer = h('div');
+  world.append(svg, nodesLayer);
+  const hintEl = h('div', { class: 'hint-float' });
+  const ctrls = h('div', { class: 'ctrls' },
+    h('button', { class: 'sm', title: 'ملاءمة', onclick: () => { userMoved = false; fit(); } }, icon('fit', 18)),
+    h('button', { class: 'sm', title: 'تكبير', onclick: () => zoomBy(1.2) }, icon('plus', 18)),
+    h('button', { class: 'sm', title: 'تصغير', onclick: () => zoomBy(1 / 1.2) }, icon('minus', 18)));
+  canvas.append(world, hintEl, ctrls);
+  app.append(h('div', { class: 'editor' },
+    h('div', { class: 'ebar' },
+      h('a', { class: 'btn icon sm ghost', href: '#/', title: 'رجوع' }, icon('back', 18)),
+      titleEl, statusEl, actionsEl),
+    canvas));
+
+  // ---------------- node model
+  const NODES = [
+    { id: 'topic', icon: 'bolt', name: 'الموضوع', kind: 'trigger' },
+    { id: 'script', icon: 'pencil', name: STAGE_AR.script },
+    { id: 'voice', icon: 'mic', name: STAGE_AR.voice },
+    { id: 'timing', icon: 'clock', name: STAGE_AR.timing },
+    { id: 'storyboard', icon: 'board', name: STAGE_AR.storyboard },
+    { id: 'render', icon: 'movie', name: STAGE_AR.render },
+    { id: 'publish', icon: 'send', name: 'النشر', kind: 'out' },
+  ];
+  const modelLabel = () => {
+    if (!settings) return '';
+    const n = (settings.llmBackups || []).filter(b => b.enabled !== false && b.hasKey).length;
+    return `${settings.llm.model || 'auto'}${n ? ` +${n} احتياطي` : ''}`;
+  };
+  const SUBS = [
+    { id: 'm1', parent: 'script', icon: 'brain', name: 'الموديل', sub: modelLabel, open: () => (location.hash = '#/settings') },
+    { id: 'vp', parent: 'voice', icon: 'volume', name: 'مزوّد الصوت', sub: () => ({ tts: 'ElevenLabs', gemini: 'Gemini TTS', upload: 'ملفك' })[p.voiceSource] || '', open: () => openNdv('voice') },
+    { id: 'm2', parent: 'storyboard', icon: 'brain', name: 'الموديل', sub: modelLabel, open: () => (location.hash = '#/settings') },
+    { id: 'sty', parent: 'render', icon: 'music', name: 'الشكل', sub: () => { const st = { ...DEFAULT_STYLE, ...(p.style || {}) }; return `${MUSIC_AR.find(m => m[0] === st.music)?.[1] || ''} · ${st.formats.join('+')}`; }, open: () => openNdv('render') },
+  ];
+  const nodeStatus = nid => {
+    if (nid === 'topic') return 'done';
+    if (nid === 'publish') return p.stages.render.status === 'done' && p.render ? 'done' : p.stages.render.status === 'running' ? 'running-soft' : 'idle';
+    return p.stages[nid].status;
+  };
+  const nodeSub = nid => {
+    const st = nodeStatus(nid);
+    if (nid === 'topic') return p.topic;
+    if (nid === 'publish') return p.render ? 'فيديو + غلاف + وصف' : 'في الانتظار';
+    if (st === 'running') return nid === 'render' ? `${Math.round((live.progress.render?.value || 0) * 100)}%` : { script: 'يكتب…', voice: 'يسجّل…', timing: 'يطابق…', storyboard: 'يصمّم…' }[nid];
+    if (st === 'review') return 'بانتظار موافقتك';
+    if (st === 'error') return 'خطأ — اضغط';
+    if (nid === 'script' && p.script) return `${p.script.words} كلمة`;
+    if (nid === 'voice' && p.voice) return `${p.voice.duration.toFixed(1)} ث`;
+    if (nid === 'timing' && p.timing) return p.timing.provider === 'estimate' ? 'تقريبي' : `${Math.round(p.timing.stats.coverage * 100)}%${p.timing.stats.weak ? ` · ${p.timing.stats.weak} ضعيفة` : ''}`;
+    if (nid === 'storyboard' && p.storyboard) return `${p.storyboard.scenes.length} مشاهد`;
+    if (nid === 'render' && p.render) return `${p.render.duration.toFixed(1)} ث · ${(p.render.size / 1e6).toFixed(1)} MB`;
+    return '';
+  };
+
+  // ---------------- layout + drawing
+  let vertical = false, pos = {}, bbox = null;
+  const BOX = 96, SUBBOX = 60;
+  function layout() {
+    vertical = canvas.clientWidth < 640;
+    canvas.classList.toggle('vertical', vertical);
+    pos = {};
+    NODES.forEach((n, i) => { pos[n.id] = vertical ? { x: 0, y: i * 150 } : { x: (NODES.length - 1 - i) * 200, y: 0 }; });
+    for (const sn of SUBS) { const pp = pos[sn.parent]; pos[sn.id] = vertical ? { x: -118, y: pp.y + (BOX - SUBBOX) / 2 } : { x: pp.x + (BOX - SUBBOX) / 2, y: 200 }; }
+    const xs = Object.values(pos).map(q => q.x), ys = Object.values(pos).map(q => q.y);
+    const minX = Math.min(...xs) - (vertical ? 30 : 60), minY = Math.min(...ys) - 40;
+    for (const k of Object.keys(pos)) { pos[k].x -= minX; pos[k].y -= minY; }
+    bbox = { w: Math.max(...xs) - minX + BOX + (vertical ? 150 : 60), h: Math.max(...ys) - minY + BOX + 70 };
+  }
+  function edgePath(a, b) {
+    if (vertical) { const sx = a.x + BOX / 2, sy = a.y + BOX, tx = b.x + BOX / 2, ty = b.y; return `M${sx},${sy} C${sx},${sy + 40} ${tx},${ty - 40} ${tx},${ty}`; }
+    const sx = a.x, sy = a.y + BOX / 2, tx = b.x + BOX, ty = b.y + BOX / 2;
+    return `M${sx},${sy} C${sx - 60},${sy} ${tx + 60},${ty} ${tx},${ty}`;
+  }
+  function subPath(sn) {
+    const a = pos[sn.id], b = pos[sn.parent];
+    if (vertical) { const sx = a.x + SUBBOX, sy = a.y + SUBBOX / 2, tx = b.x, ty = b.y + BOX / 2; return [`M${sx},${sy} C${sx + 30},${sy} ${tx - 30},${ty} ${tx},${ty}`, tx, ty]; }
+    const sx = a.x + SUBBOX / 2, sy = a.y, tx = b.x + BOX / 2, ty = b.y + BOX + 46;
+    return [`M${sx},${sy} C${sx},${sy - 30} ${tx},${ty + 30} ${tx},${ty}`, tx, ty];
+  }
+  function svgEl(tag, attrs) { const e = document.createElementNS(SVGNS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); return e; }
+  function drawCanvas() {
+    layout();
+    svg.setAttribute('width', bbox.w); svg.setAttribute('height', bbox.h);
+    svg.replaceChildren();
+    NODES.slice(1).forEach((n, i) => {
+      const from = NODES[i], st = nodeStatus(n.id), fs = nodeStatus(from.id);
+      const cls = st === 'running' || st === 'running-soft' ? 'active' : fs === 'done' && ['done', 'review', 'error'].includes(st) ? 'done' : '';
+      svg.append(svgEl('path', { d: edgePath(pos[from.id], pos[n.id]), class: cls }));
+    });
+    for (const sn of SUBS) { const [d, tx, ty] = subPath(sn); svg.append(svgEl('path', { d, class: 'sub' }), svgEl('circle', { cx: tx, cy: ty, r: 4, class: 'port' })); }
+    const els = [];
+    for (const n of NODES) {
+      const st = nodeStatus(n.id);
+      const box = h('div', { class: 'box' });
+      if (n.id === 'publish' && p.render?.cover) { const img = h('img', { class: 'thumb', alt: '' }); be.fileUrl(id, p.render.cover).then(u => (img.src = u)); box.append(img); }
+      else box.append(icon(n.icon, 40));
+      const badge = { done: 'check', error: 'alert', review: 'pause', running: 'refresh' }[st];
+      if (badge) box.append(h('span', { class: 'badge-s' }, icon(badge, 15)));
+      if (STAGES.includes(n.id) && p.approvals[n.id] === 'wait' && st !== 'done') box.append(h('span', { class: 'wait', title: 'بتستنى موافقتك' }, icon('pause', 11), 'استناني'));
+      if (n.id === 'render' && st === 'running') box.append(h('span', { class: 'prog' }, h('i', { id: 'node-prog', style: `width:${((live.progress.render?.value || 0) * 100).toFixed(1)}%` })));
+      els.push(h('div', { class: `node ${n.kind || ''} s-${st === 'running-soft' ? 'idle' : st}`, id: 'node-' + n.id, style: `left:${pos[n.id].x}px;top:${pos[n.id].y}px`, onclick: () => openNdv(n.id) },
+        box, h('div', { class: 'lbl' }, n.name), h('div', { class: 'sub', dir: 'auto', id: n.id === 'render' ? 'node-render-sub' : null }, nodeSub(n.id))));
+    }
+    for (const sn of SUBS) {
+      els.push(h('div', { class: 'node subnode', style: `left:${pos[sn.id].x}px;top:${pos[sn.id].y}px`, onclick: sn.open },
+        h('div', { class: 'box' }, icon(sn.icon, 26)), h('div', { class: 'lbl' }, sn.name), h('div', { class: 'sub', dir: 'auto' }, sn.sub())));
+    }
+    nodesLayer.replaceChildren(...els);
+    world.style.width = bbox.w + 'px'; world.style.height = bbox.h + 'px';
+    if (!userMoved) fit();
+  }
+
+  // ---------------- pan / zoom
+  const view = { x: 0, y: 0, k: 1 };
+  let userMoved = false;
+  function apply() {
+    world.style.transform = `translate(${view.x}px,${view.y}px) scale(${view.k})`;
+    canvas.style.backgroundSize = `${22 * view.k}px ${22 * view.k}px`;
+    canvas.style.backgroundPosition = `${view.x}px ${view.y}px`;
+  }
+  function fit() {
+    const cw = canvas.clientWidth, ch = canvas.clientHeight;
+    if (!cw || !bbox) return;
+    // phone (vertical flow): fit the width and let the user scroll down; desktop: fit everything
+    view.k = vertical ? Math.max(0.6, Math.min(1, (cw - 16) / bbox.w)) : Math.max(0.35, Math.min(1.15, (cw - 30) / bbox.w, (ch - 80) / bbox.h));
+    view.x = (cw - bbox.w * view.k) / 2;
+    view.y = vertical ? 46 : Math.max(50, (ch - bbox.h * view.k) / 2);
+    apply();
+  }
+  function zoomBy(f, cx = canvas.clientWidth / 2, cy = canvas.clientHeight / 2) {
+    const k = Math.max(0.25, Math.min(2.2, view.k * f));
+    view.x = cx - ((cx - view.x) * k) / view.k; view.y = cy - ((cy - view.y) * k) / view.k; view.k = k;
+    userMoved = true; apply();
+  }
+  const ptrs = new Map();
+  let pinch = null;
+  canvas.addEventListener('pointerdown', e => {
+    if (e.target.closest('.node, .ctrls')) return;
+    canvas.setPointerCapture(e.pointerId);
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    canvas.classList.add('panning');
+    if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), k: view.k }; }
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (!ptrs.has(e.pointerId)) return;
+    const prev = ptrs.get(e.pointerId);
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (ptrs.size === 2 && pinch) {
+      const [a, b] = [...ptrs.values()];
+      const r = canvas.getBoundingClientRect();
+      zoomBy((pinch.k * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d) / view.k, (a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top);
+      return;
+    }
+    view.x += e.clientX - prev.x; view.y += e.clientY - prev.y; userMoved = true; apply();
+  });
+  const up = e => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; if (!ptrs.size) canvas.classList.remove('panning'); };
+  canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
+  canvas.addEventListener('wheel', e => { e.preventDefault(); const r = canvas.getBoundingClientRect(); zoomBy(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top); }, { passive: false });
+  const ro = new ResizeObserver(() => { const v = canvas.clientWidth < 640; if (v !== vertical) { userMoved = false; drawCanvas(); } else if (!userMoved) fit(); });
+  ro.observe(canvas);
+
+  // ---------------- node panel (opens on click)
+  let ndv = null;
+  function openNdv(nid) {
+    if (nid === 'publish') nid = 'render';
+    ndv?.close();
+    if (nid === 'topic') {
+      ndv = modal('الموضوع (trigger)', 'bolt', h('div', {},
+        h('label', {}, 'الموضوع'), h('div', { dir: 'auto', style: 'font-size:16px;font-weight:700' }, p.topic),
+        p.notes ? [h('label', {}, 'ملاحظات'), h('div', { dir: 'auto' }, p.notes)] : null,
+        h('div', { class: 'grid2' }, h('div', {}, h('label', {}, 'اللغة'), LANGS[p.lang || 'ar'].name), h('div', {}, h('label', {}, 'المدة'), `${p.length} ثانية`)),
+        h('label', {}, 'اتعمل'), new Date(p.createdAt).toLocaleString('ar-EG')),
+        { narrow: true, foot: h('button', { class: 'danger', onclick: async () => { if (confirm('امسح المشروع؟')) { await guard(() => be.deleteProject(id)); ndv?.close(); location.hash = '#/'; } } }, icon('trash', 16), 'حذف المشروع'), onClose: () => (ndv = null) });
+      return;
+    }
+    const n = NODES.find(x => x.id === nid);
+    ndv = modal(`${STAGES.indexOf(nid) + 1}. ${n.name}`, n.icon, cards[nid], { onClose: () => { ndv = null; live.openStage = null; } });
+    live.openStage = nid;
+  }
+
   function drawHead() {
-    head.replaceChildren(h('div', { class: 'row' },
-      h('div', { class: 'grow' }, h('h1', {}, p.title || p.topic), h('div', { class: 'muted small' }, `${p.topic} · ${p.length} ثانية · ${LANGS[p.lang || 'ar'].name}`)),
-      h('button', { class: 'danger sm', onclick: async () => { if (confirm('امسح المشروع؟')) { await guard(() => be.deleteProject(id)); location.hash = '#/'; } } }, 'حذف'),
-    ));
-    stepper.replaceChildren(...STAGES.map(s => h('div', { class: 'step ' + p.stages[s].status, onclick: () => cards[s].scrollIntoView({ behavior: 'smooth' }) }, h('b', {}, STAGE_AR[s]), STATUS_AR[p.stages[s].status])));
+    titleEl.replaceChildren(h('b', { dir: 'auto' }, p.title || p.topic), h('span', {}, `${LANGS[p.lang || 'ar'].name} · ${p.length} ث`));
+    const st = overallStatus(p.stages);
+    statusEl.replaceChildren(pill(st));
     const review = STAGES.find(s => p.stages[s].status === 'review');
     const next = STAGES.find(s => p.stages[s].status !== 'done');
-    actions.replaceChildren(...clean(
-      running() ? h('button', { class: 'danger', onclick: () => guard(() => be.cancel(id), 'اتلغى') }, '■ إلغاء')
-        : review ? h('button', { class: 'ok', onclick: () => guard(() => be.approve(id, review), 'تمام ✓') }, `✓ موافق على ${STAGE_AR[review]}`)
-        : next ? h('button', { class: 'primary', onclick: () => guard(() => be.start(id)) }, p.stages[next].status === 'error' ? `↻ كمّل من ${STAGE_AR[next]}` : `▶ ابدأ ${STAGE_AR[next]}`)
-        : h('button', { class: 'primary', onclick: () => cards.render.scrollIntoView({ behavior: 'smooth' }) }, '🎬 الفيديو جاهز'),
-    ));
+    const err = STAGES.find(s => p.stages[s].status === 'error');
+    actionsEl.replaceChildren(...clean(
+      running() ? h('button', { class: 'danger sm', onclick: () => guard(() => be.cancel(id), 'اتلغى') }, icon('stop', 16), 'إيقاف')
+        : review ? h('button', { class: 'ok sm', onclick: () => guard(() => be.approve(id, review), 'تمام ✓') }, icon('check', 16), `موافق`)
+        : next ? h('button', { class: 'primary sm', onclick: () => guard(() => be.start(id)) }, icon('play', 16), err ? 'كمّل' : 'تشغيل')
+        : h('button', { class: 'primary sm', onclick: () => openNdv('render') }, icon('movie', 16), 'الفيديو')));
+    const runningStage = STAGES.find(s => p.stages[s].status === 'running');
+    hintEl.textContent = runningStage ? `⏳ شغّال: ${STAGE_AR[runningStage]}${runningStage === 'render' && live.progress.render ? ` · ${Math.round(live.progress.render.value * 100)}%` : ''}`
+      : review ? `⏸ «${STAGE_AR[review]}» بانتظار موافقتك — اضغط عليها تراجعها`
+      : err ? `⚠ خطأ في «${STAGE_AR[err]}» — اضغط عليها تشوف السبب`
+      : !next ? '✓ الريل جاهز — اضغط «النشر»'
+      : '▶ اضغط «تشغيل» أو اضغط أي خطوة تشوف تفاصيلها';
   }
 
   function stageShell(s, body) {
     const st = p.stages[s];
     const appr = seg([['auto', 'تلقائي'], ['wait', 'استناني']], p.approvals[s], v => guard(() => be.setApprovals(id, { [s]: v })));
     const btns = [];
-    if (st.status === 'review') btns.push(h('button', { class: 'ok sm', onclick: () => guard(() => be.approve(id, s), 'تمام ✓') }, '✓ موافق'));
-    if (!running() && (st.status !== 'idle' || STAGES.indexOf(s) === 0 || p.stages[STAGES[STAGES.indexOf(s) - 1]].status === 'done')) btns.push(h('button', { class: 'ghost sm', onclick: () => guard(() => be.rerun(id, s)) }, st.status === 'idle' ? '▶ شغّل' : '↻ إعادة'));
-    if (st.status === 'running') btns.push(h('button', { class: 'danger sm', onclick: () => guard(() => be.cancel(id)) }, 'إلغاء'));
+    if (st.status === 'review') btns.push(h('button', { class: 'ok sm', onclick: () => guard(() => be.approve(id, s), 'تمام ✓') }, icon('check', 15), 'موافق'));
+    if (!running() && (st.status !== 'idle' || STAGES.indexOf(s) === 0 || p.stages[STAGES[STAGES.indexOf(s) - 1]].status === 'done')) btns.push(h('button', { class: 'sm', onclick: () => guard(() => be.rerun(id, s)) }, icon(st.status === 'idle' ? 'play' : 'refresh', 15), st.status === 'idle' ? 'شغّل الخطوة' : 'أعد الخطوة'));
+    if (st.status === 'running') btns.push(h('button', { class: 'danger sm', onclick: () => guard(() => be.cancel(id)) }, icon('stop', 15), 'إيقاف'));
     const log = h('div', { class: 'log', id: 'log-' + s }, st.log.slice(-60).map(l => h('div', { dir: 'auto', class: /^✗/.test(l.msg) ? 'err' : '' }, l.msg)));
     cards[s].replaceChildren(...clean(
-      h('div', { class: 'stage-head' }, h('h2', {}, `${STAGES.indexOf(s) + 1}. ${STAGE_AR[s]}`), h('span', { class: 'badge ' + st.status }, STATUS_AR[st.status]), h('span', { class: 'spacer' }), appr, ...btns),
+      h('div', { class: 'stage-head' }, h('span', { class: 'badge ' + st.status }, STATUS_AR[st.status]), h('span', { class: 'spacer' }), appr, ...btns),
       st.error ? h('div', { class: 'errbox' },
         h('div', { dir: 'auto' }, '⚠️ ' + st.error),
         h('div', { class: 'row', style: 'margin-top:8px' },
@@ -476,6 +713,7 @@ async function viewProject(id) {
   const bodies = { script: bodyScript, voice: bodyVoice, timing: bodyTiming, storyboard: bodyStoryboard, render: bodyRender };
   function refresh() {
     drawHead();
+    drawCanvas();
     for (const s of STAGES) {
       const editing = live.editing[s] || (s === 'storyboard' && live.editing.scene != null);
       if (editing && cards[s].dataset.editing) continue;
@@ -491,6 +729,8 @@ async function viewProject(id) {
       p = ev.project;
       for (const s of STAGES) if (before.stages[s].status !== 'running' && p.stages[s].status === 'running') { live.stream[s] = ''; if (s === 'render') { live.frame = null; live.progress.render = null; } }
       refresh();
+      const nowReview = STAGES.find(s => before.stages[s].status === 'running' && p.stages[s].status === 'review');
+      if (nowReview && !ndv) openNdv(nowReview);
     } else if (ev.type === 'log') {
       const el = document.getElementById('log-' + ev.stage);
       if (el) { el.append(h('div', { dir: 'auto', class: /^✗/.test(ev.line.msg) ? 'err' : '' }, ev.line.msg)); el.scrollTop = el.scrollHeight; }
@@ -503,13 +743,16 @@ async function viewProject(id) {
       const bar = document.getElementById('render-bar'), lab = document.getElementById('render-label');
       if (bar) bar.style.width = (ev.value * 100).toFixed(1) + '%';
       if (lab) lab.textContent = ev.label;
+      const np = document.getElementById('node-prog'), ns = document.getElementById('node-render-sub');
+      if (np) np.style.width = (ev.value * 100).toFixed(1) + '%';
+      if (ns && ev.stage === 'render') ns.textContent = `${Math.round(ev.value * 100)}%`;
     } else if (ev.type === 'frame') {
       live.frame = ev.data;
       const img = document.getElementById('live-frame');
       if (img) img.src = ev.data;
     }
   });
-  cleanup = () => { unsub(); preview?.destroy(); };
+  cleanup = () => { unsub(); preview?.destroy(); ro.disconnect(); ndv?.close(); };
 }
 
 // ---------------------------------------------------------------- settings
@@ -616,7 +859,7 @@ async function viewSettings() {
     : h('div', {}, h('label', {}, 'فولدر الخط (مسار على الجهاز فيه ملف ttf/otf/woff2)'), inp('fontFolder', { class: 'ltr', placeholder: 'C:\\Fonts\\MyArabicFont' }), h('div', { class: 'hint' }, 'سيبه فاضي = IBM Plex Sans Arabic (مرفق مع رخصة OFL).'));
 
   app.append(...clean(
-    h('div', { class: 'card' }, h('h1', {}, 'الإعدادات'),
+    h('div', { class: 'card' },
       h('p', { class: 'muted small' }, be.mode === 'server' ? '🔒 المفاتيح محفوظة على جهازك في data/settings.json، والمتصفح بيشوف آخر 4 حروف بس.' : '📱 وضع الهاتف: كل حاجة شغالة جوه المتصفح، والمفاتيح محفوظة على الجهاز ده بس (IndexedDB).')),
     h('div', { class: 'card' }, h('h2', {}, '1. الذكاء الاصطناعي (LLM)'),
       h('div', { class: 'hint' }, 'أي API متوافق مع OpenAI. الافتراضي FreeLLMAPI على جهازك.'), presets,
@@ -661,12 +904,18 @@ async function viewSettings() {
   ));
   updHint();
   f['llm.baseUrl'].addEventListener('input', updHint);
+  const pg = h('div', { class: 'page' }, h('div', { class: 'page-head' }, h('div', {}, h('h1', {}, 'الإعدادات والمفاتيح'), h('div', { class: 'sub' }, 'مفاتيح الـ APIs (credentials)، الموديلات، الصوت والشكل الافتراضي'))));
+  pg.append(...app.childNodes);
+  app.append(pg);
 }
 
 // ---------------------------------------------------------------- boot
 be = await pickBackend();
 const h0 = await be.health().catch(() => ({}));
-$('#mode').textContent = be.mode === 'server' ? '💻 PC' : '📱 هاتف';
+$('#mode').textContent = be.mode === 'server' ? 'PC' : 'هاتف';
+$('#logo').append(icon('movie', 22));
+$('#nav-home').prepend(icon('grid', 22));
+$('#nav-settings').prepend(icon('key', 22));
 $('#mode').title = be.mode === 'server' ? `ffmpeg: ${h0.ffmpeg ? '✓' : '✗'}` : `WebCodecs: ${h0.webcodecs ? '✓' : '✗'}`;
 if ('serviceWorker' in navigator && location.protocol === 'https:' ) navigator.serviceWorker.register('sw.js').catch(() => {});
 route();

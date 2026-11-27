@@ -31,7 +31,7 @@ const shot = name => page.screenshot({ path: join(OUT, name + '.png'), fullPage:
 
 async function fillSettings() {
   await page.goto(`${BASE}/#/settings`);
-  await page.waitForSelector('text=الإعدادات');
+  await page.waitForSelector('h1:has-text("الإعدادات")');
   const set = async (label, value) => { const el = page.locator(`label:has-text("${label}") + *`).first(); await el.fill(value); };
   const inputs = page.locator('input.ltr');
   // Base URL fields: llm, eleven, deepgram (in order)
@@ -55,34 +55,43 @@ async function fillSettings() {
 
 async function runProject(tag, timeoutMs, es = false) {
   await page.goto(`${BASE}/#/`);
-  await page.waitForSelector('textarea');
-  await page.fill('textarea', 'ليه بنتاوب لما نشوف حد بيتاوب؟');
-  if (es) { await page.click('text=Español'); await page.fill('textarea', '¿Por qué bostezamos?'); } else await page.click('text=العربية (مصري)');
-  await page.click('.chip:has-text("10 ث")');
-  await shot(tag + '-home');
-  await page.click('text=✦ ابدأ الريل');
-  await page.waitForSelector('.badge.review', { timeout: 30000 });
-  ok(await page.locator(`#st-script >> text=${es ? '¿Sabes por qué?' : 'عارف ليه؟'}`).count() > 0, `${tag}: ${es ? 'Spanish' : 'Arabic'} script ready for review`);
+  await page.click('button:has-text("ريل جديد")');
+  await page.waitForSelector('.ndv textarea');
+  if (es) await page.click('.ndv button:has-text("Español")'); else await page.click('.ndv button:has-text("العربية (مصري)")');
+  await page.fill('.ndv textarea', es ? '¿Por qué bostezamos?' : 'ليه بنتاوب لما نشوف حد بيتاوب؟');
+  await page.click('.ndv .chip:has-text("10 ث")');
+  await shot(tag + '-new');
+  await page.click('button:has-text("أنشئ وشغّل")');
+  await page.waitForSelector('.canvas .node');
+  ok(await page.locator('.canvas .node:not(.subnode)').count() === 7 && await page.locator('.canvas .subnode').count() === 4, `${tag}: workflow canvas with 7 nodes + 4 sub-nodes`);
+  // the script step waits for approval → its panel opens by itself
+  await page.waitForSelector('.ndv .badge.review', { timeout: 30000 });
+  ok(await page.locator(`.ndv >> text=${es ? '¿Sabes por qué?' : 'عارف ليه؟'}`).count() > 0, `${tag}: ${es ? 'Spanish' : 'Arabic'} script ready for review (panel opened on its own)`);
+  ok(await page.locator('#node-script.s-review').count() === 1, `${tag}: script node shows «waiting»`);
   await shot(tag + '-script-review');
-  await page.click('.sticky-actions button.ok');
+  await page.click('.ndv button.ok');
+  await page.click('.ndv-head button');
   const t0 = Date.now();
-  let sawFrame = false;
+  let sawFrame = false, openedRender = false, sawRunningNode = false;
   while (Date.now() - t0 < timeoutMs) {
+    if (await page.locator('.node.s-running').count()) sawRunningNode = true;
+    if (!openedRender && await page.locator('#node-render.s-running').count()) { await page.click('#node-render'); openedRender = true; }
     if (await page.locator('#live-frame[src^="data:"]').count()) { if (!sawFrame) await shot(tag + '-rendering'); sawFrame = true; }
-    if (await page.locator('#st-render video').count()) break;
-    if (await page.locator('.badge.error').count()) break;
+    if (await page.locator('#node-publish.s-done').count()) break;
+    if (await page.locator('.node.s-error').count()) break;
     await sleep(300);
   }
+  ok(sawRunningNode, `${tag}: running node animated on the canvas`);
   ok(sawFrame, `${tag}: live preview frame shown while rendering`);
-  ok(await page.locator('#st-render video').count() === 1, `${tag}: finished video shown`);
-  const err = await page.locator('.badge.error').count();
-  if (err) console.log(await page.locator('.stage .err').allTextContents());
-  await page.locator('#st-render').scrollIntoViewIfNeeded();
+  if (await page.locator('.node.s-error').count()) console.log(await page.locator('.errbox').allTextContents());
+  document: {
+    await page.locator('.overlay').evaluateAll(els => els.forEach(e => e.remove()));
+    await page.click('#node-publish');
+    await page.waitForSelector('.ndv video', { timeout: 10000 }).catch(() => {});
+  }
+  ok(await page.locator('.ndv video').count() === 1, `${tag}: finished video shown in the «publish» panel`);
   await sleep(500);
   await shot(tag + '-done');
-  await page.locator('#st-storyboard').scrollIntoViewIfNeeded();
-  await sleep(800);
-  await shot(tag + '-storyboard');
   return page.url().split('/p/')[1];
 }
 
@@ -103,7 +112,7 @@ try {
     await fillSettings();
     await runProject('phone', 240000, true);
     // pull the mp4 out of the page and check it
-    const b64 = await page.evaluate(async () => { const v = document.querySelector('#st-render video'); const b = await (await fetch(v.src)).arrayBuffer(); let s = ''; const u = new Uint8Array(b); for (let i = 0; i < u.length; i += 32768) s += String.fromCharCode(...u.subarray(i, i + 32768)); return btoa(s); });
+    const b64 = await page.evaluate(async () => { const v = document.querySelector('.ndv video'); const b = await (await fetch(v.src)).arrayBuffer(); let s = ''; const u = new Uint8Array(b); for (let i = 0; i < u.length; i += 32768) s += String.fromCharCode(...u.subarray(i, i + 32768)); return btoa(s); });
     const f = join(OUT, 'phone-reel.mp4');
     writeFileSync(f, Buffer.from(b64, 'base64'));
     const probe = spawnSync(ffmpegPath(), ['-hide_banner', '-i', f], { encoding: 'utf8' }).stderr;
