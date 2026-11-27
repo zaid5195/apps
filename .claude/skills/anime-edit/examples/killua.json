@@ -1,0 +1,48 @@
+{
+  "_note": "Killua Zoldyck edit (v4) that the user approved. Song: Rushex - TRAKELLA (user's file), first 51.2 s. Image numbers = indexes in cand.txt from: images.py find DIR killua-zoldyck?p=2 killua-zoldyck?p=3 killua-zoldyck?p=4 killua-zoldyck?p=5 killua-zoldyck?p=6 cool-killua-pictures?p=4 killua-4k killua-aesthetic hunter-x-hunter-4k killua-phone",
+  "images_dir": "WORKDIR/img/hd",
+  "song": "WORKDIR/song.m4a",
+  "song_start": 0,
+  "duration": 51.2,
+  "drop": 25.6,
+  "drop_end": 47.125,
+  "title": ["KILLUA", "ZOLDYCK"],
+  "subtitle": "HUNTER x HUNTER",
+  "colors": {"accent": [90, 180, 255], "intro_tint": [110, 80, 190], "drop_tint": [80, 150, 255], "spark": [170, 215, 255]},
+  "keywords": ["ASSASSINS", "KILL", "FEAR", "MERCY", "FRIENDS", "FREE", "LIGHTNING", "KILLUA", "ZOLDYCK"],
+  "name_words": ["KILLUA", "ZOLDYCK"],
+  "voice": {
+    "engine": "kokoro", "voice": "am_onyx", "speed": 0.82, "pitch": 0.92, "duck": 0.2, "gain": 3.4,
+    "lines": [
+      {"at": 1.0,   "text": "He was born into a family of assassins.", "chunks": ["HE WAS BORN", "INTO A FAMILY", "OF ASSASSINS."]},
+      {"at": 5.0,   "text": "Trained since childhood to kill without hesitation.", "chunks": ["TRAINED SINCE", "CHILDHOOD", "TO KILL", "WITHOUT HESITATION."]},
+      {"at": 9.5,   "text": "No fear.", "speed": 0.8, "chunks": ["NO FEAR."]},
+      {"at": 10.9,  "text": "No mercy.", "speed": 0.8, "chunks": ["NO MERCY."]},
+      {"at": 12.5,  "text": "No friends.", "speed": 0.8, "chunks": ["NO FRIENDS."]},
+      {"at": 14.5,  "text": "But one boy showed him what it means to be free.", "chunks": ["BUT ONE BOY", "SHOWED HIM", "WHAT IT MEANS", "TO BE FREE."]},
+      {"at": 18.9,  "text": "And when that boy needed him most,", "chunks": ["AND WHEN THAT BOY", "NEEDED HIM MOST,"]},
+      {"at": 21.6,  "text": "he became lightning.", "chunks": ["HE BECAME", "LIGHTNING."]},
+      {"at": 23.85, "text": "Killua Zoldyck.", "chunks": ["KILLUA", "ZOLDYCK."]}
+    ]
+  },
+  "shots": [
+    {"start": 0,     "end": 5,     "img": "268.jpg", "mode": "intro",   "focus": 0.42, "_why": "Silva / Zoldyck family - 'family of assassins'"},
+    {"start": 5,     "end": 9.5,   "img": "142.jpg", "mode": "intro",   "focus": 0.45, "fy": 0.4, "_why": "Killua bleeding - 'trained to kill'"},
+    {"start": 9.5,   "end": 10.9,  "img": "143.jpg", "mode": "intro",   "focus": 0.5,  "_why": "cold stare - 'no fear'"},
+    {"start": 10.9,  "end": 12.5,  "img": "146.jpg", "mode": "intro",   "focus": 0.55, "_why": "assassin grin - 'no mercy'"},
+    {"start": 12.5,  "end": 14.5,  "img": "140.jpg", "mode": "intro",   "focus": 0.62, "_why": "alone in the dark - 'no friends'"},
+    {"start": 14.5,  "end": 16.8,  "img": "6.jpg",   "mode": "pan",     "focus": [0.14, 0.74], "_why": "pan Gon -> Killua - 'one boy'"},
+    {"start": 16.8,  "end": 18.9,  "img": "290.jpg", "mode": "free",    "focus": 0.62, "_why": "blue sky - 'free'"},
+    {"start": 18.9,  "end": 21.6,  "img": "120.jpg", "mode": "intro",   "focus": 0.5,  "_why": "intense eyes - 'needed him most'"},
+    {"start": 21.6,  "end": 23.85, "img": "216.jpg", "mode": "flicker", "focus": 0.5,  "_why": "Godspeed glow - 'became lightning'"},
+    {"start": 23.85, "end": 25.6,  "img": "90.jpg",  "mode": "push",    "focus": 0.45, "fy": 0.32, "_why": "Godspeed face, zoom-in into the drop"}
+  ],
+  "drop_images": [
+    {"img": "208.jpg", "focus": 0.45}, {"img": "133.jpg", "focus": 0.4}, {"img": "214.jpg", "focus": 0.55},
+    {"img": "224.jpg", "focus": 0.27, "fy": 0.45}, {"img": "86.jpg", "focus": 0.58}, {"img": "197.jpg", "focus": 0.6},
+    {"img": "123.jpg", "focus": 0.4}, {"img": "216.jpg", "focus": 0.5}, {"img": "146.jpg", "focus": 0.55}
+  ],
+  "end_image": {"img": "213.jpg", "focus": 0.5, "fy": 0.4},
+  "lightning": [[24.07, 3], [24.6, 3]],
+  "flicker": [21.75, 23.8]
+}
