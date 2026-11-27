@@ -1,0 +1,268 @@
+{
+ "_note": "Nezuko Kamado edit, Arabic (Fusha) female narrator via Higgsfield text2speech_v2/elevenlabs voice 'Vesper', one job split on silences.",
+ "images_dir": "WORKDIR/img/hd",
+ "song": "WORKDIR/song.m4a",
+ "song_start": 0,
+ "duration": 51.2,
+ "drop": 25.6,
+ "drop_end": 47.125,
+ "title": [
+  "NEZUKO",
+  "KAMADO"
+ ],
+ "subtitle": "DEMON SLAYER",
+ "title_icon": "none",
+ "colors": {
+  "accent": [
+   255,
+   95,
+   160
+  ],
+  "intro_tint": [
+   150,
+   40,
+   70
+  ],
+  "drop_tint": [
+   255,
+   70,
+   120
+  ],
+  "spark": [
+   255,
+   160,
+   130
+  ]
+ },
+ "keywords": [
+  "رقيقة",
+  "عائلتها",
+  "الشيطان",
+  "شيء",
+  "جوع",
+  "كراهية",
+  "استسلام",
+  "أخاها",
+  "الظلام",
+  "نارا",
+  "نيزوكو",
+  "كامادو"
+ ],
+ "name_words": [
+  "نيزوكو",
+  "كامادو"
+ ],
+ "voice": {
+  "engine": "higgsfield-elevenlabs",
+  "voice": "Vesper",
+  "pitch": 0.97,
+  "duck": 0.2,
+  "gain": 3.0,
+  "lines": [
+   {
+    "at": 0.9,
+    "text": "كانت فتاة رقيقة... تحب عائلتها.",
+    "chunks": [
+     "كانت فتاة رقيقة",
+     "تحب عائلتها"
+    ]
+   },
+   {
+    "at": 4.7,
+    "text": "حتى جاءت تلك الليلة... وأخذ الشيطان كل شيء.",
+    "chunks": [
+     "حتى جاءت",
+     "تلك الليلة",
+     "وأخذ الشيطان",
+     "كل شيء"
+    ]
+   },
+   {
+    "at": 9.5,
+    "text": "لا جوع.",
+    "chunks": [
+     "لا جوع"
+    ]
+   },
+   {
+    "at": 10.8,
+    "text": "لا كراهية.",
+    "chunks": [
+     "لا كراهية"
+    ]
+   },
+   {
+    "at": 12.35,
+    "text": "لا استسلام.",
+    "chunks": [
+     "لا استسلام"
+    ]
+   },
+   {
+    "at": 14.4,
+    "text": "تحمي أخاها... بكل أنفاسها.",
+    "chunks": [
+     "تحمي أخاها",
+     "بكل أنفاسها"
+    ]
+   },
+   {
+    "at": 17.3,
+    "text": "وحين جاء الظلام ليأخذه...",
+    "chunks": [
+     "وحين جاء",
+     "الظلام ليأخذه"
+    ]
+   },
+   {
+    "at": 20.1,
+    "text": "صار دمها نارا.",
+    "chunks": [
+     "صار دمها",
+     "نارا"
+    ]
+   },
+   {
+    "at": 23.7,
+    "text": "نيزوكو... كامادو.",
+    "chunks": [
+     "نيزوكو",
+     "كامادو"
+    ]
+   }
+  ]
+ },
+ "shots": [
+  {
+   "start": 0,
+   "end": 4.7,
+   "img": "232.jpg",
+   "mode": "pan",
+   "focus": [
+    0.25,
+    0.72
+   ]
+  },
+  {
+   "start": 4.7,
+   "end": 9.5,
+   "img": "307.jpg",
+   "mode": "intro",
+   "focus": 0.5,
+   "fy": 0.4
+  },
+  {
+   "start": 9.5,
+   "end": 10.8,
+   "img": "142.jpg",
+   "mode": "intro",
+   "focus": 0.5
+  },
+  {
+   "start": 10.8,
+   "end": 12.35,
+   "img": "211.jpg",
+   "mode": "intro",
+   "focus": 0.45
+  },
+  {
+   "start": 12.35,
+   "end": 14.4,
+   "img": "264.jpg",
+   "mode": "intro",
+   "focus": 0.35
+  },
+  {
+   "start": 14.4,
+   "end": 17.3,
+   "img": "293.jpg",
+   "mode": "pan",
+   "focus": [
+    0.62,
+    0.25
+   ]
+  },
+  {
+   "start": 17.3,
+   "end": 20.1,
+   "img": "268.jpg",
+   "mode": "intro",
+   "focus": 0.42
+  },
+  {
+   "start": 20.1,
+   "end": 23.7,
+   "img": "212.jpg",
+   "mode": "flicker",
+   "focus": 0.4
+  },
+  {
+   "start": 23.7,
+   "end": 25.6,
+   "img": "1.jpg",
+   "mode": "push",
+   "focus": 0.5,
+   "fy": 0.45
+  }
+ ],
+ "drop_images": [
+  {
+   "img": "27.jpg",
+   "focus": 0.5,
+   "fy": 0.4
+  },
+  {
+   "img": "160.jpg",
+   "focus": 0.53
+  },
+  {
+   "img": "208.jpg",
+   "focus": 0.52
+  },
+  {
+   "img": "256.jpg",
+   "focus": 0.4
+  },
+  {
+   "img": "171.jpg",
+   "focus": 0.5
+  },
+  {
+   "img": "262.jpg",
+   "focus": 0.75
+  },
+  {
+   "img": "142.jpg",
+   "focus": 0.5
+  },
+  {
+   "img": "268.jpg",
+   "focus": 0.42
+  },
+  {
+   "img": "212.jpg",
+   "focus": 0.4
+  }
+ ],
+ "end_image": {
+  "img": "18.jpg",
+  "focus": 0.35,
+  "fy": 0.45
+ },
+ "lightning": [
+  [
+   23.75,
+   3
+  ],
+  [
+   24.8,
+   3
+  ]
+ ],
+ "flicker": [
+  20.2,
+  23.6
+ ],
+ "caption_font": "~/.cache/fonts/package/files/cairo-arabic-900-normal.woff",
+ "rtl": true
+}

@@ -138,6 +138,9 @@ def add_layer(f, half):
 # ---------------------------------------------------------------- captions
 
 # set by render.py from the config
+CAP_FONT = FONT    # caption font (Arabic needs one with Arabic glyphs, e.g. Cairo 900)
+RTL = False        # right-to-left captions: first word on the right
+PUNCT = ".,،…!؟?"
 KEY = set()        # words drawn big, blue, with a shake
 NAME = set()       # words drawn extra big (the character's name)
 
@@ -159,7 +162,7 @@ def build_timeline(lines):
         line_chunks = []
         for c in cks:
             ws = c.split()
-            line_chunks.append({"words": [(w.strip(".,"), times[k + i]) for i, w in enumerate(ws)], "start": times[k]})
+            line_chunks.append({"words": [(w.strip(PUNCT), times[k + i]) for i, w in enumerate(ws)], "start": times[k]})
             k += len(ws)
         for i, ch in enumerate(line_chunks):
             ch["end"] = line_chunks[i + 1]["start"] if i + 1 < len(line_chunks) else e + 0.45
@@ -170,7 +173,7 @@ def build_timeline(lines):
 _font_cache = {}
 def _font(sz):
     if sz not in _font_cache:
-        _font_cache[sz] = ImageFont.truetype(FONT, sz)
+        _font_cache[sz] = ImageFont.truetype(CAP_FONT, sz)
     return _font_cache[sz]
 
 
@@ -230,12 +233,18 @@ def draw_captions(frame, t, chunks, rng):
     total = sum(widths) + space * (len(words) - 1)
     shrink = min(1.0, 860 / total)
     x = (W - total * shrink) / 2
+    if RTL:
+        x = (W + total * shrink) / 2
     out = Image.fromarray(frame).convert("RGBA")
     exit_p = max(0.0, (t - (c["end"] - 0.1)) / 0.1)
     for (w, tw), k, (im, pad), wd in zip(words, keys, imgs, widths):
         dt = t - tw
-        cx = x + wd * shrink / 2
-        x += (wd + space) * shrink
+        if RTL:
+            cx = x - wd * shrink / 2
+            x -= (wd + space) * shrink
+        else:
+            cx = x + wd * shrink / 2
+            x += (wd + space) * shrink
         if dt < -0.01:
             continue
         # pop-in with overshoot

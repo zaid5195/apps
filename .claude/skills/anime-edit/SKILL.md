@@ -41,6 +41,14 @@ description: صناعة إديت (Edit) لشخصية أنمي أو أي شخصي
 6. **Preview**: `python3 $SK/render.py WORK/config.json WORK WORK/preview.mp4 --preview` (نص الحجم و 15 fps، ~2 دقايق). استخرج فريمات بـ ffmpeg فالأوقات المهمة وشوفهم (Read).
 7. **النسخة النهائية**: نفس الأمر بلا `--preview` (~4 دقايق لـ 50 ث). شيك الفريمات مرة أخرى، ومن بعد `SendUserFile` مع `display: render`.
 
+## صوت وترجمة بالعربية (فصحى)
+مثال: `examples/nezuko_ar.json`. Kokoro ما كيهضرش العربية.
+1. **الصوت (بالكريديت):** Higgsfield `generate_audio` بـ `model: text2speech_v2`, `variant: elevenlabs`, `voice_type: preset` + صوت من `list_voices` (مرا فخمة: Vesper). النص كامل فـ **job وحدة** (أرخص: ~0.75 كريديت)، كل جملة فسطر، و `...` للوقفات، وبالتشكيل باش ينطق مزيان. `estimate_audio_cost` أولا وقول الثمن للمستخدم وتسنى الموافقة.
+2. **التنزيل:** الملف فـ `d8j0ntlcm91z4.cloudfront.net` (تزاد للبيئة "Anime edits"؛ إلا تبلوكا زيدو بـ `update_environment`).
+3. **التقسيم:** `ffmpeg` لـ wav 24k، لقى السكتات (≥0.35 ث)، وإلا جوج جمل تلصقو قلب على سكتة أقصر (~0.25 ث) وسطهم. قطع كل جملة لـ `WORK/tts/lineN.wav`، حط `at` لكل وحدة (الاسم يسالي قبل الدروب)، ومن بعد `voice.py ... --skip-tts`.
+4. **الترجمة:** `"rtl": true` و `"caption_font"`: خط Cairo 900 من npm (GitHub raw مبلوكي):
+   `cd ~/.cache/fonts && npm pack @fontsource/cairo@5.0.19 && tar xzf fontsource-cairo-*.tgz` ← `~/.cache/fonts/package/files/cairo-arabic-900-normal.woff`. الكلمات بلا تشكيل. `keywords` بنفس الكتابة ديال الـ chunks. العنوان كيبقى بالحروف اللاتينية (Inter ما فيهش العربية).
+
 ## الإديت من الداخل (render.py + fx.py)
 - قبل الدروب: لون مطفي + tint موف، زووم بطيء، fade-in، شرارات خفاف بزاف.
 - الدروب: فلاش أبيض + اهتزاز قوي 1.2 ث + 4 برقات. من بعد: صورة جديدة على كل Kick، زووم/اهتزاز 0.3 ث، RGB split 0.18 ث، فلاش خفيف، 2 برقات، شرارات.
@@ -51,4 +59,3 @@ description: صناعة إديت (Edit) لشخصية أنمي أو أي شخصي
 ## أفكار للتطوير (إلا طلبها)
 - B-roll ديال البرق/الطاقة بالذكاء الاصطناعي كـ overlay (Higgsfield / Halai، بالكريديت).
 - كليبات المستخدم: زيدها كـ shots فالـ config (يحتاج تعديل `src` باش يقرا فيديو).
-- Captions بالعربية: خاص خط عربي + `arabic_reshaper`/`python-bidi`.

@@ -16,6 +16,7 @@ Config keys used here (see examples/killua.json):
   voice.lines[].chunks, keywords, name_words    captions
   lightning: [[t, n_bolts], ...]                extra bolts (names, key words); drawn in colors.accent
   title_icon: "bolt" (default) | "none"
+  caption_font, rtl                             Arabic captions: Cairo 900 + rtl true (title stays Latin)
   flicker: [from, to]                           rapid bolts ("he became lightning")
 """
 import json, subprocess, sys, os
@@ -157,6 +158,8 @@ if cfg.get("flicker"):
         tt += 0.36
 LIGHT = fx.Lightning(ev)
 SPARKS = fx.Sparks()
+fx.CAP_FONT = os.path.expanduser(cfg.get("caption_font", fx.FONT))
+fx.RTL = bool(cfg.get("rtl", False))
 fx.KEY = set(w.upper() for w in cfg.get("keywords", []))
 fx.NAME = set(w.upper() for w in cfg.get("name_words", []))
 CHUNKS = fx.build_timeline([(tuple(sp), ln["chunks"]) for sp, ln in zip(spans, cfg["voice"]["lines"])])
