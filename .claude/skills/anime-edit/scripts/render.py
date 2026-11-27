@@ -14,7 +14,8 @@ Config keys used here (see examples/killua.json):
   title: [line1, line2], subtitle
   colors: {accent, intro_tint, drop_tint, spark}
   voice.lines[].chunks, keywords, name_words    captions
-  lightning: [[t, n_bolts], ...]                extra bolts (names, key words)
+  lightning: [[t, n_bolts], ...]                extra bolts (names, key words); drawn in colors.accent
+  title_icon: "bolt" (default) | "none"
   flicker: [from, to]                           rapid bolts ("he became lightning")
 """
 import json, subprocess, sys, os
@@ -135,6 +136,8 @@ def draw_title(a, alpha):
     if sub:
         w = d.textlength(sub, font=font_small)
         d.text(((W - w) / 2, 1680), sub, font=font_small, fill=(200, 220, 255, A))
+    if cfg.get("title_icon", "bolt") != "bolt":
+        return np.asarray(Image.alpha_composite(im, layer).convert("RGB"))
     bx, by = W / 2, 1300
     d.polygon([(bx + 12, by - 70), (bx - 38, by + 6), (bx - 2, by + 6), (bx - 16, by + 72), (bx + 38, by - 10),
                (bx + 2, by - 10)], fill=ACCENT + (A,))

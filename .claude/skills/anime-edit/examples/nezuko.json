@@ -1,0 +1,289 @@
+{
+ "_note": "Nezuko Kamado edit. Song: Rushex - TRAKELLA (user's file). Female narrator. Image numbers = indexes in cand.txt from: images.py find DIR --match \"nezuko|tanjiro|kamado|muzan|demon\" nezuko nezuko?p=2 nezuko?p=3 nezuko-kamado nezuko-kamado?p=2 nezuko-aesthetic tanjiro-and-nezuko demon-slayer-4k demon-slayer-4k?p=2. Skipped 254, 245, 253, 162: fan art drawing her (a child in the series) in a revealing way.",
+ "images_dir": "WORKDIR/img/hd",
+ "song": "WORKDIR/song.m4a",
+ "song_start": 0,
+ "duration": 51.2,
+ "drop": 25.6,
+ "drop_end": 47.125,
+ "title": [
+  "NEZUKO",
+  "KAMADO"
+ ],
+ "subtitle": "DEMON SLAYER",
+ "title_icon": "none",
+ "colors": {
+  "accent": [
+   255,
+   95,
+   160
+  ],
+  "intro_tint": [
+   150,
+   40,
+   70
+  ],
+  "drop_tint": [
+   255,
+   70,
+   120
+  ],
+  "spark": [
+   255,
+   160,
+   130
+  ]
+ },
+ "keywords": [
+  "GENTLE",
+  "FAMILY",
+  "DEMON",
+  "EVERYTHING",
+  "HUNGER",
+  "HATRED",
+  "SURRENDER",
+  "BROTHER",
+  "FIRE",
+  "NEZUKO",
+  "KAMADO"
+ ],
+ "name_words": [
+  "NEZUKO",
+  "KAMADO"
+ ],
+ "voice": {
+  "engine": "kokoro",
+  "voice": "bf_emma",
+  "speed": 0.8,
+  "pitch": 0.94,
+  "duck": 0.2,
+  "gain": 3.4,
+  "lines": [
+   {
+    "at": 1.0,
+    "text": "She was a gentle girl, who loved her family.",
+    "chunks": [
+     "SHE WAS",
+     "A GENTLE GIRL,",
+     "WHO LOVED HER FAMILY."
+    ]
+   },
+   {
+    "at": 5.0,
+    "text": "Until one night, a demon took everything.",
+    "chunks": [
+     "UNTIL ONE NIGHT,",
+     "A DEMON",
+     "TOOK EVERYTHING."
+    ]
+   },
+   {
+    "at": 9.5,
+    "text": "No hunger.",
+    "speed": 0.78,
+    "chunks": [
+     "NO HUNGER."
+    ]
+   },
+   {
+    "at": 10.9,
+    "text": "No hatred.",
+    "speed": 0.78,
+    "chunks": [
+     "NO HATRED."
+    ]
+   },
+   {
+    "at": 12.5,
+    "text": "No surrender.",
+    "speed": 0.78,
+    "chunks": [
+     "NO SURRENDER."
+    ]
+   },
+   {
+    "at": 14.5,
+    "text": "She protects her brother with every breath.",
+    "chunks": [
+     "SHE PROTECTS",
+     "HER BROTHER",
+     "WITH EVERY BREATH."
+    ]
+   },
+   {
+    "at": 18.9,
+    "text": "And when the darkness came for him,",
+    "chunks": [
+     "AND WHEN",
+     "THE DARKNESS",
+     "CAME FOR HIM,"
+    ]
+   },
+   {
+    "at": 21.6,
+    "text": "her blood turned to fire.",
+    "chunks": [
+     "HER BLOOD",
+     "TURNED TO FIRE."
+    ]
+   },
+   {
+    "at": 23.85,
+    "text": "Nezuko Kamado.",
+    "chunks": [
+     "NEZUKO",
+     "KAMADO."
+    ]
+   }
+  ]
+ },
+ "shots": [
+  {
+   "start": 0,
+   "end": 5,
+   "img": "232.jpg",
+   "mode": "pan",
+   "focus": [
+    0.25,
+    0.72
+   ],
+   "_why": "siblings as kids - 'gentle girl, loved her family'"
+  },
+  {
+   "start": 5,
+   "end": 9.5,
+   "img": "307.jpg",
+   "mode": "intro",
+   "focus": 0.5,
+   "fy": 0.4,
+   "_why": "Tanjiro holding her in the bloody snow - 'a demon took everything'"
+  },
+  {
+   "start": 9.5,
+   "end": 10.9,
+   "img": "142.jpg",
+   "mode": "intro",
+   "focus": 0.5,
+   "_why": "fighting the demon inside - 'no hunger'"
+  },
+  {
+   "start": 10.9,
+   "end": 12.5,
+   "img": "211.jpg",
+   "mode": "intro",
+   "focus": 0.45,
+   "_why": "soft eyes - 'no hatred'"
+  },
+  {
+   "start": 12.5,
+   "end": 14.5,
+   "img": "264.jpg",
+   "mode": "intro",
+   "focus": 0.35,
+   "_why": "standing firm in the wind - 'no surrender'"
+  },
+  {
+   "start": 14.5,
+   "end": 16.8,
+   "img": "293.jpg",
+   "mode": "pan",
+   "focus": [
+    0.62,
+    0.25
+   ],
+   "_why": "Tanjiro -> Nezuko - 'her brother'"
+  },
+  {
+   "start": 16.8,
+   "end": 18.9,
+   "img": "302.jpg",
+   "mode": "free",
+   "focus": 0.56,
+   "fy": 0.4,
+   "_why": "together - 'every breath'"
+  },
+  {
+   "start": 18.9,
+   "end": 21.6,
+   "img": "268.jpg",
+   "mode": "intro",
+   "focus": 0.42,
+   "_why": "red moon, darkness - 'the darkness came'"
+  },
+  {
+   "start": 21.6,
+   "end": 23.85,
+   "img": "212.jpg",
+   "mode": "flicker",
+   "focus": 0.4,
+   "_why": "Exploding Blood - 'blood turned to fire'"
+  },
+  {
+   "start": 23.85,
+   "end": 25.6,
+   "img": "1.jpg",
+   "mode": "push",
+   "focus": 0.5,
+   "fy": 0.45,
+   "_why": "her eyes, zoom-in into the drop"
+  }
+ ],
+ "drop_images": [
+  {
+   "img": "27.jpg",
+   "focus": 0.5,
+   "fy": 0.4
+  },
+  {
+   "img": "160.jpg",
+   "focus": 0.53
+  },
+  {
+   "img": "208.jpg",
+   "focus": 0.52
+  },
+  {
+   "img": "256.jpg",
+   "focus": 0.4
+  },
+  {
+   "img": "171.jpg",
+   "focus": 0.5
+  },
+  {
+   "img": "262.jpg",
+   "focus": 0.75
+  },
+  {
+   "img": "142.jpg",
+   "focus": 0.5
+  },
+  {
+   "img": "268.jpg",
+   "focus": 0.42
+  },
+  {
+   "img": "212.jpg",
+   "focus": 0.4
+  }
+ ],
+ "end_image": {
+  "img": "18.jpg",
+  "focus": 0.35,
+  "fy": 0.45
+ },
+ "lightning": [
+  [
+   23.9,
+   3
+  ],
+  [
+   24.7,
+   3
+  ]
+ ],
+ "flicker": [
+  21.7,
+  23.7
+ ]
+}

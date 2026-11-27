@@ -201,7 +201,7 @@ def word_img(word, key, size):
         ImageDraw.Draw(mask).text((pad - l, pad - tp), word, font=f, fill=255)
         grad = np.zeros((h, w, 4), np.uint8)
         yy = np.linspace(0, 1, h)[:, None]
-        top, bot = np.array([255, 255, 255]), np.array([70, 165, 255])
+        top, bot = np.array([255, 255, 255]), np.array(BLUE) * 0.85
         grad[..., :3] = (top * (1 - yy[..., None]) + bot * yy[..., None]).astype(np.uint8) * np.ones((1, w, 1), np.uint8)
         grad[..., 3] = np.asarray(mask)
         d.text((pad - l, pad - tp), word, font=f, fill=(0, 0, 0, 0), stroke_width=7, stroke_fill=(10, 20, 45, 255))
