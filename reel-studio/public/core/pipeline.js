@@ -12,6 +12,7 @@ import { buildTimeline, videoDuration, speechEnd, TAIL } from './timeline.js';
 import { mixAudio, encodeWav } from './audio.js';
 import { LANGS, lang as L } from './lang.js';
 import { presetById } from './defaults.js';
+import { youtubeMeta, uploadVideo, setThumbnail } from './youtube.js';
 import { friendly, providerOf, isLocalUrl, missingKey, fixBaseUrl, providerFromKey, looksLikeKey } from './errors.js';
 
 export const STAGES = ['script', 'voice', 'timing', 'storyboard', 'render'];
@@ -284,7 +285,47 @@ export class Pipeline {
       resolveDone();
       this.emit(id, { type: 'idle' });
     }
-    return this.get(id);
+    const fin = await this.get(id);
+    // Auto-publish to YouTube right after a successful render (Settings → YouTube → auto).
+    if (fin.stages.render.status === 'done' && fin.stages.render.endedAt && fin.youtube?.status !== 'done' && fin.youtube?.status !== 'running') {
+      const s2 = await this.env.getSettings();
+      if (s2.youtube?.autoUpload && Date.now() - new Date(fin.stages.render.endedAt).getTime() < 120000) this.youtubeUpload(id).catch(() => {});
+    }
+    return fin;
+  }
+
+  /** Upload the finished reel to the connected YouTube channel (title / description / tags, cover as thumbnail). */
+  async youtubeUpload(id, overrides = {}) {
+    this.ytBusy ??= new Set();
+    if (this.ytBusy.has(id)) throw Object.assign(new Error('Upload already running'), { status: 409 });
+    let p = await this.get(id);
+    if (!p.render?.file) throw Object.assign(new Error('اعمل رندر للفيديو الأول'), { status: 409 });
+    const settings = await this.env.getSettings();
+    const meta = youtubeMeta(p, { privacy: settings.youtube?.privacy || 'public', ...overrides });
+    this.ytBusy.add(id);
+    p.youtube = { status: 'running', progress: 0, meta, startedAt: now() };
+    await this.save(p);
+    try {
+      const token = await this.env.youtubeToken();
+      const bytes = await this.env.store.readFile(id, p.render.file);
+      const base = this.env.ytBase || {};
+      const r = await uploadVideo({ accessToken: token, bytes, meta, fetchImpl: this.env.fetch, base: base.upload, onProgress: v => this.emit(id, { type: 'youtube', value: v }) });
+      let thumbnail = false, note = '';
+      if (settings.youtube?.setThumbnail !== false && p.render.cover) {
+        try { await setThumbnail({ accessToken: token, videoId: r.id, jpeg: await this.env.store.readFile(id, p.render.cover), fetchImpl: this.env.fetch, base: base.upload }); thumbnail = true; }
+        catch (e) { note = e.status === 403 ? 'الغلاف ما اتحطّش: يوتيوب بيطلب توثيق القناة برقم التليفون عشان الصور المصغّرة المخصّصة.' : 'الغلاف ما اتحطّش: ' + e.message.slice(0, 120); }
+      }
+      p = await this.get(id);
+      p.youtube = { status: 'done', videoId: r.id, url: r.url, privacy: r.privacy || meta.privacy, meta, thumbnail, note, at: now() };
+      if (meta.privacy === 'public' && r.privacy && r.privacy !== 'public') p.youtube.note = (p.youtube.note ? p.youtube.note + ' ' : '') + 'يوتيوب نزّل الفيديو «خاص» (مشروع Google لسه مش متراجع) — افتحه في YouTube Studio وخلّيه «عام».';
+      await this.save(p);
+      return p;
+    } catch (e) {
+      p = await this.get(id);
+      p.youtube = { status: e.code === 'needs-auth' ? 'needs-auth' : 'error', error: e.friendlyAr || e.message, meta, at: now() };
+      await this.save(p);
+      throw e;
+    } finally { this.ytBusy.delete(id); }
   }
 
   /** Which service a stage talks to (for error messages). */
@@ -587,7 +628,7 @@ export class Pipeline {
       const raw = await this.llm(settings, { ...ctx, llm: () => {} }, { messages: publishMessages({ lang: p.lang, title: p.script.title, script: p.script.text, sources: p.script.sources }), temperature: 0.8 });
       const j = extractJson(raw);
       const tags = (Array.isArray(j.hashtags) ? j.hashtags : String(j.hashtags || '').split(/\s+/)).map(h => '#' + String(h).replace(/^#+/, '').replace(/\s+/g, '_')).filter(h => h.length > 1).slice(0, 14);
-      p.publish = { caption: String(j.caption || '').trim(), hashtags: tags };
+      p.publish = { title: String(j.title || p.script.title || '').trim().slice(0, 100), caption: String(j.caption || '').trim(), hashtags: tags };
       if (!p.publish.caption) throw new Error('empty caption');
       ctx.log(`Caption + ${tags.length} hashtags ready`);
     } catch (e) {

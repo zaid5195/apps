@@ -13,6 +13,8 @@ import { elevenVoices } from './public/core/providers.js';
 import { listModels } from './public/core/llm.js';
 import { licenseSummary } from './public/core/icons.js';
 import { lang } from './public/core/lang.js';
+import { YT_DEFAULTS, authUrl, exchangeCode, refreshToken, getChannel } from './public/core/youtube.js';
+import { randomBytes } from 'node:crypto';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 loadDotEnv(ROOT);
@@ -49,6 +51,19 @@ async function customFont() {
   } catch { return null; }
 }
 
+// ---- YouTube (OAuth with a refresh token, so uploads work unattended — even in batches)
+const YT = { api: process.env.YOUTUBE_API_BASE || YT_DEFAULTS.api, upload: process.env.YOUTUBE_UPLOAD_BASE || YT_DEFAULTS.upload, token: process.env.GOOGLE_TOKEN_URL || YT_DEFAULTS.token, auth: process.env.GOOGLE_AUTH_URL || YT_DEFAULTS.auth };
+const ytRedirect = () => `http://${HOST}:${PORT}/oauth/youtube/callback`;
+let ytCache = null, ytState = null;
+async function youtubeToken() {
+  const y = settings.get().youtube || {};
+  if (!y.refreshToken) throw Object.assign(new Error('YouTube not connected'), { code: 'needs-auth', friendlyAr: 'اربط قناة يوتيوب من الإعدادات الأول.' });
+  if (ytCache && ytCache.rt === y.refreshToken && ytCache.exp > Date.now() + 60000) return ytCache.token;
+  const t = await refreshToken({ clientId: y.clientId, clientSecret: y.clientSecret, refreshToken: y.refreshToken, tokenUrl: YT.token });
+  ytCache = { token: t.access_token, exp: Date.now() + (t.expires_in || 3600) * 1000, rt: y.refreshToken };
+  return ytCache.token;
+}
+
 const pipeline = new Pipeline({
   store,
   fetch: (...a) => fetch(...a),
@@ -56,6 +71,8 @@ const pipeline = new Pipeline({
   loadStyleGuide: lg => readFile(join(ROOT, 'references', lang(lg).styleFile), 'utf8'),
   loadIcons,
   updateSettings: async patch => settings.update(patch),
+  youtubeToken,
+  ytBase: YT,
   decodeAudio: bytes => decodeAudio(bytes),
   emit,
   async render({ project, data, file = 'reel.mp4', cover = false, wav, settings: s, signal, onProgress, onFrame, log, emit: send }) {
@@ -138,6 +155,16 @@ async function api(req, res, url) {
     const s = settings.get();
     return send(res, 200, { voices: await elevenVoices({ ...s.eleven }) });
   }
+  if (parts[0] === 'youtube') {
+    const y = settings.get().youtube || {};
+    if (!parts[1] && m === 'GET') return send(res, 200, { configured: !!(y.clientId && y.clientSecret), connected: !!y.refreshToken, channel: y.channel || null, redirectUri: ytRedirect(), origin: `http://${HOST}:${PORT}` });
+    if (parts[1] === 'connect' && m === 'GET') {
+      if (!y.clientId || !y.clientSecret) return send(res, 400, { error: 'حط Client ID و Client secret الأول' });
+      ytState = randomBytes(12).toString('hex');
+      return send(res, 200, { url: authUrl({ clientId: y.clientId, redirectUri: ytRedirect(), state: ytState, base: YT.auth }) });
+    }
+    if (parts[1] === 'disconnect' && m === 'POST') { ytCache = null; settings.update({ youtube: { refreshToken: '', channel: null } }); return send(res, 200, { ok: true }); }
+  }
   if (parts[0] === 'ideas' && m === 'POST') return send(res, 200, await pipeline.ideas(await readJson(req)));
   if (parts[0] === 'batch') {
     if (m === 'POST') { const b = await readJson(req); return send(res, 202, await pipeline.batch(b.topics || [], b.options || {})); }
@@ -214,6 +241,7 @@ async function api(req, res, url) {
     await pipeline.save(p);
     return send(res, 200, p);
   }
+  if (sub === 'youtube' && m === 'POST') { const b = await readJson(req); pipeline.youtubeUpload(id, b).catch(() => {}); return send(res, 202, { ok: true }); }
   if (sub === 'style' && m === 'POST') return send(res, 200, await pipeline.setStyle(id, await readJson(req)));
   if (sub === 'render-data' && m === 'GET') {
     const p = await pipeline.get(id);
@@ -254,6 +282,21 @@ const server = http.createServer(async (req, res) => {
     }
     const url = new URL(req.url, `http://${req.headers.host}`);
     if (url.pathname.startsWith('/api/')) return await api(req, res, url);
+    if (url.pathname === '/oauth/youtube/callback') {
+      const code = url.searchParams.get('code'), state = url.searchParams.get('state');
+      const back = msg => { res.writeHead(302, { location: `/#/settings?yt=${encodeURIComponent(msg)}` }); res.end(); };
+      if (!code || !state || state !== ytState) return back(url.searchParams.get('error') || 'state');
+      ytState = null;
+      try {
+        const y = settings.get().youtube || {};
+        const t = await exchangeCode({ clientId: y.clientId, clientSecret: y.clientSecret, code, redirectUri: ytRedirect(), tokenUrl: YT.token });
+        if (!t.refresh_token) return back('no-refresh-token');
+        ytCache = { token: t.access_token, exp: Date.now() + (t.expires_in || 3600) * 1000, rt: t.refresh_token };
+        const channel = await getChannel({ accessToken: t.access_token, base: YT.api }).catch(() => null);
+        settings.update({ youtube: { refreshToken: t.refresh_token, channel } });
+        return back('ok');
+      } catch (e) { return back(String(e.message).slice(0, 120)); }
+    }
     if (url.pathname.startsWith('/references/')) {
       const f = inside(join(ROOT, 'references'), decodeURIComponent(url.pathname.slice('/references/'.length)));
       return f ? serveFile(req, res, f) : send(res, 404, 'Not found');

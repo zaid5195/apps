@@ -10,6 +10,7 @@ export const DEFAULT_SETTINGS = {
   endFollow: '',
   endComment: '',
   llmBackups: [],
+  youtube: { clientId: '', clientSecret: '', refreshToken: '', privacy: 'public', autoUpload: false, setThumbnail: true, channel: null },
   gemini: { apiKey: '', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', ttsModel: 'gemini-2.5-flash-preview-tts', voice: 'Kore' },
   style: { music: 'calm', musicLevel: 1, captions: 'classic', endScreen: true, hook: true, formats: ['9:16'] },
   fontFolder: '',
@@ -18,7 +19,7 @@ export const DEFAULT_SETTINGS = {
   sfxLevel: 1,
   renderer: 'auto',
 };
-export const SECRET_PATHS = [['llm', 'apiKey'], ['eleven', 'apiKey'], ['deepgram', 'apiKey'], ['gemini', 'apiKey']];
+export const SECRET_PATHS = [['llm', 'apiKey'], ['eleven', 'apiKey'], ['deepgram', 'apiKey'], ['gemini', 'apiKey'], ['youtube', 'clientSecret'], ['youtube', 'refreshToken']];
 /** One-tap presets for OpenAI-compatible providers (all work from a phone browser except a local FreeLLMAPI). */
 export const LLM_PRESETS = [
   { id: 'freellmapi', name: 'FreeLLMAPI (local)', baseUrl: 'http://127.0.0.1:31415/v1', model: 'auto', keyLink: 'https://github.com/tashfeenahmed/freellmapi', free: true, local: true },

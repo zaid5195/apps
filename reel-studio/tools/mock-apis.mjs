@@ -143,7 +143,8 @@ function chat(req, res, body) {
 
 // ---------------------------------------------------------------- TTS
 const SR = 44100;
-let lastGemini = null; // word timings of the last Gemini TTS answer (tests compare the estimate against it)
+let lastGemini = null;
+const ytSessions = new Map(), ytVideos = new Map(); // word timings of the last Gemini TTS answer (tests compare the estimate against it)
 function synthSpeech(text, SR = 44100) {
   // One "syllable babble" burst per word; timings per character.
   const chars = [...text];
@@ -256,6 +257,34 @@ export function startMock(port = PORT) {
       }
       if (url.pathname === '/v1beta/models') return json(res, 200, { models: [{ name: 'models/gemini-flash-latest' }, { name: 'models/mock-tts-2' }, { name: 'models/mock-tts' }] });
       if (url.pathname === '/mock/last-gemini-words') return json(res, 200, { words: lastGemini });
+      // ---- YouTube / Google OAuth mocks
+      if (url.pathname === '/o/oauth2/v2/auth') { res.writeHead(302, { location: `${url.searchParams.get('redirect_uri')}?code=mock-code&state=${url.searchParams.get('state')}` }); return res.end(); }
+      if (url.pathname === '/token' && req.method === 'POST') {
+        const f = new URLSearchParams(raw.toString());
+        if (f.get('grant_type') === 'authorization_code' && f.get('code') !== 'mock-code') return json(res, 400, { error: 'invalid_grant' });
+        if (f.get('grant_type') === 'refresh_token' && f.get('refresh_token') !== '1//mock-refresh') return json(res, 400, { error: 'invalid_grant' });
+        return json(res, 200, { access_token: 'ya29.mock', expires_in: 3600, ...(f.get('grant_type') === 'authorization_code' ? { refresh_token: '1//mock-refresh' } : {}) });
+      }
+      if (url.pathname === '/youtube/v3/channels') return req.headers.authorization === 'Bearer ya29.mock' ? json(res, 200, { items: [{ id: 'UCmock', snippet: { title: 'Mock Channel' } }] }) : json(res, 401, { error: { message: 'bad token' } });
+      if (url.pathname === '/upload/youtube/v3/videos' && req.method === 'POST') {
+        if (req.headers.authorization !== 'Bearer ya29.mock') return json(res, 401, { error: { message: 'bad token' } });
+        const sid = 'u' + (stats.yt = (stats.yt || 0) + 1);
+        ytSessions.set(sid, { meta: JSON.parse(raw.toString()), size: +req.headers['x-upload-content-length'], got: 0 });
+        res.writeHead(200, { location: `http://127.0.0.1:${PORT}/upload/youtube/v3/session/${sid}` }); return res.end();
+      }
+      const ys = url.pathname.match(/^\/upload\/youtube\/v3\/session\/(\w+)$/);
+      if (ys && req.method === 'PUT') {
+        const se = ytSessions.get(ys[1]);
+        const m = String(req.headers['content-range']).match(/bytes (\d+)-(\d+)\/(\d+)/);
+        if (!se || !m || +m[1] !== se.got || raw.length !== +m[2] - +m[1] + 1) return json(res, 400, { error: { message: 'bad chunk' } });
+        se.got = +m[2] + 1;
+        if (se.got < se.size) { res.writeHead(308, { range: `bytes=0-${se.got - 1}` }); return res.end(); }
+        const vid = 'mockVid' + ys[1];
+        ytVideos.set(vid, { ...se.meta, bytes: se.got });
+        return json(res, 200, { id: vid, status: { privacyStatus: 'private' } });
+      }
+      if (url.pathname === '/upload/youtube/v3/thumbnails/set' && req.method === 'POST') { const v = ytVideos.get(url.searchParams.get('videoId')); if (v) v.thumbnailBytes = raw.length; return json(res, 200, { items: [{}] }); }
+      if (url.pathname === '/mock/youtube-videos') return json(res, 200, Object.fromEntries(ytVideos));
       if (url.pathname === '/v1/models') return json(res, 200, { object: 'list', data: [{ id: 'models/text-embedding-004' }, { id: 'models/mock-flash-latest' }, { id: 'models/mock-pro' }, { id: 'auto' }, { id: 'models/busy-model' }] });
       if (url.pathname === '/v1/voices') { stats.voices++; return json(res, 200, { voices: [{ voice_id: 'mock-voice-eg', name: 'Mock Egyptian (male)', category: 'premade', labels: { accent: 'egyptian' } }, { voice_id: 'mock-voice-2', name: 'Mock Narrator', category: 'premade', labels: {} }] }); }
       const ttsM = url.pathname.match(/^\/v1\/text-to-speech\/([^/]+)\/with-timestamps$/);
